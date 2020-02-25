@@ -19,6 +19,7 @@
 #include <MozziGuts.h>
 #include <Oscil.h> // oscillator template
 #include <ADSR.h>
+#include <LowPassFilter.h>
 #include <tables/sin2048_int8.h> // sine table for oscillator
 
 // use: Oscil <table_size, update_rate> oscilName (wavetable), look in .h file of table #included above
@@ -28,7 +29,7 @@ Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aSin2(SIN2048_DATA);
 Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aSin3(SIN2048_DATA);
 
 // use #define for CONTROL_RATE, not a constant
-#define CONTROL_RATE 64 // Hz, powers of 2 are most reliable
+#define CONTROL_RATE 128 // Hz, powers of 2 are most reliable
 ADSR <CONTROL_RATE, CONTROL_RATE> envelope0;
 ADSR <CONTROL_RATE, CONTROL_RATE> envelope1;
 ADSR <CONTROL_RATE, CONTROL_RATE> envelope2;
@@ -41,7 +42,8 @@ bool button_state = digitalRead(2);
 int input_freq = 440;
 
 long note_timers[4];
-unsigned char gains[4];
+unsigned int gains[4];
+unsigned int gain = 0;
 // Oscil<2048, 16384> note_oscs[4];
 // ADSR<64, 64> note_envs[4];
 
@@ -52,14 +54,14 @@ class Note {
     int freq;
     int osc_index;
     
-    unsigned int a_t = 2000;
+    unsigned int a_t = 50;
     byte a_level = 255;
-    unsigned int d_t = 2000;
-    byte d_level = 255;
-    unsigned int s_t = 2000;
-    byte s_level = 255;
-    unsigned int r_t = 2000;
-    byte r_level = 255;
+    unsigned int d_t = 200;
+    byte d_level = 64;
+    unsigned int s_t = 10000;
+    // byte s_level = 255;
+    unsigned int r_t = 200;
+    // byte r_level = 255;
 
   public:
     Note(int, int);
@@ -85,35 +87,31 @@ Note::Note(int init_osc_index, int init_freq){
     if(osc_index == 0){
       aSin0.setFreq(freq);
 
-      envelope0.noteOff();
-      envelope0.setADLevels(a_level,d_level);
-      // milliseconds
-      envelope0.setTimes(a_t,d_t,s_t,r_t);
-      envelope0.update();
+      // envelope0.setADLevels(a_level,d_level);
+      // // milliseconds
+      // envelope0.setTimes(a_t,d_t,s_t,r_t);
+      // envelope0.update();
     } else if(osc_index == 1){
       aSin1.setFreq(freq);
 
-      envelope1.noteOff();
-      envelope1.setADLevels(a_level,d_level);
-      // milliseconds
-      envelope1.setTimes(a_t,d_t,s_t,r_t);
-      envelope1.update();
+      // envelope1.setADLevels(a_level,d_level);
+      // // milliseconds
+      // envelope1.setTimes(a_t,d_t,s_t,r_t);
+      // envelope1.update();
     } else if(osc_index == 2){
       aSin2.setFreq(freq);
 
-      envelope2.noteOff();
-      envelope2.setADLevels(a_level,d_level);
-      // milliseconds
-      envelope2.setTimes(a_t,d_t,s_t,r_t);
-      envelope2.update();
+      // envelope2.setADLevels(a_level,d_level);
+      // // milliseconds
+      // envelope2.setTimes(a_t,d_t,s_t,r_t);
+      // envelope2.update();
     } else if(osc_index == 3){
       aSin3.setFreq(freq);
 
-      envelope3.noteOff();
-      envelope3.setADLevels(a_level,d_level);
-      // milliseconds
-      envelope3.setTimes(a_t,d_t,s_t,r_t);
-      envelope3.update();
+      // envelope3.setADLevels(a_level,d_level);
+      // // milliseconds
+      // envelope3.setTimes(a_t,d_t,s_t,r_t);
+      // envelope3.update();
     }
   }
 
@@ -211,21 +209,21 @@ int Note::env_next(){
 
   // modify that shit based on current control vals
   if(osc_index == 0){
-Serial.println("enve 0");
-Serial.println(envelope0.next());
-    return (unsigned char)envelope0.next();
+    // Serial.println("enve 0");
+    // Serial.println(envelope0.next());
+    return (unsigned int)envelope0.next();
   } else if(osc_index == 1){
-    Serial.println("enve 1");
-Serial.println(envelope1.next());
-    return (unsigned char)envelope1.next();
+    // Serial.println("enve 1");
+    // Serial.println(envelope1.next());
+    return (unsigned int)envelope1.next();
   } else if(osc_index == 2){
-    Serial.println("enve 2");
-Serial.println(envelope2.next());
-    return (unsigned char)envelope2.next();
+    // Serial.println("enve 2");
+    // Serial.println(envelope2.next());
+    return (unsigned int)envelope2.next();
   } else if(osc_index == 3){
-    Serial.println("enve 3");
-Serial.println(envelope3.next());
-    return (unsigned char)envelope3.next();
+    // Serial.println("enve 3");
+    // Serial.println(envelope3.next());
+    return (unsigned int)envelope3.next();
   }
 }
 
@@ -249,8 +247,8 @@ void play_note(int freq){
 
   notes[available_slot]->set_frequency(freq);
 
-  Serial.println("Maybe it fucking worked");
-  Serial.println(notes[available_slot]->get_frequency());
+  // Serial.println("Maybe it fucking worked");
+  // Serial.println(notes[available_slot]->get_frequency());
 
   // notes[available_slot].set_frequency(freq);
   held_down_note = available_slot;
@@ -264,7 +262,7 @@ void play_note(int freq){
 }
 
 void setup(){
-  Serial.begin(9600);
+  // Serial.begin(9600);
   startMozzi(CONTROL_RATE); // :)
   note0 = Note(0, 0);
   note1 = Note(1, 0);
@@ -274,10 +272,45 @@ void setup(){
   notes[1] = &note1;
   notes[2] = &note2;
   notes[3] = &note3;
+    
+  unsigned int a_t = 50;
+  byte a_level = 255;
+  unsigned int d_t = 200;
+  byte d_level = 128;
+  unsigned int s_t = 3000;
+  // byte s_level = 255;
+  unsigned int r_t = 200;
+
+
+  // aSin0.setFreq(freq);
+  envelope0.setADLevels(a_level,d_level);
+  // milliseconds
+  envelope0.setTimes(a_t,d_t,s_t,r_t);
+  envelope0.update();
+
+  // aSin1.setFreq(freq);
+  envelope1.setADLevels(a_level,d_level);
+  // milliseconds
+  envelope1.setTimes(a_t*10,d_t,s_t,r_t);
+  envelope1.update();
+
+  // aSin2.setFreq(freq);
+  envelope2.setADLevels(a_level,d_level);
+  // milliseconds
+  envelope2.setTimes(a_t*10,d_t,s_t,r_t);
+  envelope2.update();
+
+  // aSin3.setFreq(freq);
+  envelope3.setADLevels(a_level,d_level);
+  // milliseconds
+  envelope3.setTimes(a_t*10,d_t,s_t,r_t);
+  envelope3.update();
+
 }
 
 
 void updateControl(){
+
   // button_state = digitalRead(2);
 
   // put changing controls in here
@@ -291,42 +324,42 @@ void updateControl(){
   // }
 
   // button down and not playing note and held for 10ms
-  if(button_state && (held_down_note<0) && (mozziMicros() > button_down_timer + 10000) ) {
+
+  if(button_state && (held_down_note<0) && mozziMicros() > button_down_timer + 10000){
     // init playing
-    Serial.println("Button state true");
+    // Serial.println("Button state true");
     play_note(input_freq);
     button_down_timer = mozziMicros();
   } else if(!button_state && held_down_note>=0) {
     // I stopped holding
-    Serial.println("time for note off ");
-    Serial.println(held_down_note);
+    // Serial.println("time for note off ");
+    // Serial.println(held_down_note);
     notes[held_down_note]->note_off();
     held_down_note = -1;
   }
-
+  
   for(int i=0; i<4; i++){
-    // is note timer active and has been 3s
-    if(note_timers[i] > 0 && mozziMicros() > note_timers[i] + 600000 ){
-      Serial.println("finishined note timer for");
-      Serial.println(i);
+    // is note timer active and has been 600ms
+    if(held_down_note != i && note_timers[i] > 0 && mozziMicros() > note_timers[i] + 1000000 ){
+      // Serial.println("finishined note timer for");
+      // Serial.println(i);
 
       note_timers[i] = 0;
       notes[i]->set_frequency(0);
-      notes[i]->note_off();
+      // notes[i]->note_off();
       gains[i] = 0;
+    } else if(note_timers[i] > 0) {
+      // note still rockin
+      gains[i] = notes[i]->env_next();
     }
+
   }
 }
 
 int updateAudio(){
   int sig = 0;
-  unsigned char gain = 0;
-  int active_sigs = 0;
-
-  envelope0.update();
-  envelope1.update();
-  envelope2.update();
-  envelope3.update();
+  // unsigned int gain = 0;
+  // int active_sigs = 0;
 
   // get vals from all playing notes
   for(int i=0; i<4; i++){
@@ -338,26 +371,22 @@ int updateAudio(){
       sigs[i] = notes[i]->osc_next();
       // active_sigs += 1;
 
-      // unsigned char gain = notes[i]->env_next();
-      // sigs[i] = gain * sigs[i];
-      sig += sigs[i];
-      // Serial.println(e);
-      // gains[i] = e;
-      // gain += gains[i];
-      // if(gains[i]>0){
-      //   Serial.println("Gain ");
-      //   Serial.println(i);
-      //   Serial.println(gains[i]);
-      // }
+      if(sigs[i]){
+        sig += (gains[i] * sigs[i]);
+      }
+      // sig += sigs[i];
 
     }
   }
   
   // gain = 1;
 
-  return (int) sig;
-  // Serial.println(sig);
-  // return (int) sig;
+  // return (int) (gain * sig)>>8;
+
+  return (int) sig>>8;
+  // char dasig = low_pass.next((gain*sig));
+  // return (int) low_pass.next(sig)>>8;
+  // return (int) dasig;
 }
 
 void loop(){
