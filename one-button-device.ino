@@ -17,6 +17,7 @@
 */
 
 #include <MozziGuts.h>
+#include <EventDelay.h>
 #include <Oscil.h> // oscillator template
 #include <ADSR.h>
 #include <LowPassFilter.h>
@@ -51,16 +52,18 @@ unsigned int gain = 0;
 
 class Note {
   private:
+    bool playing = false;
+
     int freq;
     int osc_index;
     
-    unsigned int a_t = 50;
-    byte a_level = 255;
-    unsigned int d_t = 200;
-    byte d_level = 64;
-    unsigned int s_t = 10000;
-    // byte s_level = 255;
-    unsigned int r_t = 200;
+    // unsigned int a_t = 4;
+    // byte a_level = 255;
+    // unsigned int d_t = 15;
+    // byte d_level = 64;
+    // unsigned int s_t = 3000;
+    // // byte s_level = 255;
+    // unsigned int r_t = 300;
     // byte r_level = 255;
 
   public:
@@ -69,6 +72,8 @@ class Note {
     // void initialize(int, int);
     void note_on();
     void note_off();
+
+    bool is_playing();
 
     int get_frequency();
     void set_frequency(int);
@@ -87,34 +92,34 @@ Note::Note(int init_osc_index, int init_freq){
     if(osc_index == 0){
       aSin0.setFreq(freq);
 
-      // envelope0.setADLevels(a_level,d_level);
-      // // milliseconds
-      // envelope0.setTimes(a_t,d_t,s_t,r_t);
-      // envelope0.update();
     } else if(osc_index == 1){
       aSin1.setFreq(freq);
 
-      // envelope1.setADLevels(a_level,d_level);
-      // // milliseconds
-      // envelope1.setTimes(a_t,d_t,s_t,r_t);
-      // envelope1.update();
     } else if(osc_index == 2){
       aSin2.setFreq(freq);
 
-      // envelope2.setADLevels(a_level,d_level);
-      // // milliseconds
-      // envelope2.setTimes(a_t,d_t,s_t,r_t);
-      // envelope2.update();
+
     } else if(osc_index == 3){
       aSin3.setFreq(freq);
 
-      // envelope3.setADLevels(a_level,d_level);
-      // // milliseconds
-      // envelope3.setTimes(a_t,d_t,s_t,r_t);
-      // envelope3.update();
     }
   }
 
+}
+
+bool Note::is_playing(){
+  // if(osc_index == 0){
+  //   return envelope0.playing();
+  // } else if(osc_index == 1){
+  //   return envelope1.playing();
+  // } else if(osc_index == 2){
+  //   return envelope2.playing();
+  // } else if(osc_index == 3){
+  //   return envelope3.playing();
+  // } else {
+  //   return false;
+  // }
+  return playing;
 }
 
 int Note::get_osc_index(){
@@ -123,10 +128,9 @@ int Note::get_osc_index(){
 
 void Note::note_off(){
   // begin tail off
-  // note_envs[osc_index].noteOff();
   int oi = get_osc_index();
   if(oi == 0){
-
+    // Serial.println("I did my notofos");
     envelope0.noteOff();
   } else if(oi == 1){
 
@@ -138,24 +142,29 @@ void Note::note_off(){
 
     envelope3.noteOff();
   }
+
+  // deflag dat
+  playing = false;
 }
 
 void Note::note_on(){
   // begin tail off
   // note_envs[oi].noteOff();
+
+  playing = true;
   int oi = get_osc_index();
   if(oi == 0){
-
-    envelope0.noteOn();
+    // Serial.println("note on");
+    envelope0.noteOn(true);
   } else if(oi == 1){
 
-    envelope1.noteOn();
+    envelope1.noteOn(true);
   } else if(oi == 2){
 
-    envelope2.noteOn();
+    envelope2.noteOn(true);
   } else if(oi == 3){
 
-    envelope3.noteOn();
+    envelope3.noteOn(true);
   }
 }
 
@@ -228,6 +237,8 @@ int Note::env_next(){
 }
 
 Note *notes[4];
+EventDelay *note_delays[4];
+
 // Note new_note = Note(0, 0);
 Note note0 = Note(0, 0);
 Note note1 = Note(1, 0);
@@ -259,6 +270,9 @@ void play_note(int freq){
   // reinit envelope (noteoff)
   notes[available_slot]->setup_envelope();
   notes[available_slot]->note_on();
+
+  // total time of all envelope parts
+  note_delays[available_slot]->start(371);
 }
 
 void setup(){
@@ -272,15 +286,26 @@ void setup(){
   notes[1] = &note1;
   notes[2] = &note2;
   notes[3] = &note3;
-    
-  unsigned int a_t = 50;
-  byte a_level = 255;
-  unsigned int d_t = 200;
-  byte d_level = 128;
-  unsigned int s_t = 3000;
-  // byte s_level = 255;
-  unsigned int r_t = 200;
 
+  EventDelay event_delay0 = EventDelay(371);
+  EventDelay event_delay1 = EventDelay(371);
+  EventDelay event_delay2 = EventDelay(371);
+  EventDelay event_delay3 = EventDelay(371);
+  note_delays[0] = &event_delay0;
+  note_delays[1] = &event_delay1;
+  note_delays[2] = &event_delay2;
+  note_delays[3] = &event_delay3;
+
+
+
+    
+  unsigned int a_t = 8;
+  byte a_level = 255;
+  unsigned int d_t = 22;
+  byte d_level = 128;
+  unsigned int s_t = 1;
+  // byte s_level = 255;
+  unsigned int r_t = 340;
 
   // aSin0.setFreq(freq);
   envelope0.setADLevels(a_level,d_level);
@@ -305,7 +330,6 @@ void setup(){
   // milliseconds
   envelope3.setTimes(a_t*10,d_t,s_t,r_t);
   envelope3.update();
-
 }
 
 
@@ -324,7 +348,6 @@ void updateControl(){
   // }
 
   // button down and not playing note and held for 10ms
-
   if(button_state && (held_down_note<0) && mozziMicros() > button_down_timer + 10000){
     // init playing
     // Serial.println("Button state true");
@@ -334,25 +357,42 @@ void updateControl(){
     // I stopped holding
     // Serial.println("time for note off ");
     // Serial.println(held_down_note);
+    // notes[held_down_note]->note_off();
+    // held_down_note = -1;
+    
     notes[held_down_note]->note_off();
     held_down_note = -1;
-  }
-  
+  }  
+
+  bool note_playing;
   for(int i=0; i<4; i++){
     // is note timer active and has been 600ms
-    if(held_down_note != i && note_timers[i] > 0 && mozziMicros() > note_timers[i] + 1000000 ){
-      // Serial.println("finishined note timer for");
-      // Serial.println(i);
+    // if(held_down_note != i && note_timers[i] > 0 && mozziMicros() > note_timers[i] + 1000000 ){
+    //   // Serial.println("finishined note timer for");
+    //   // Serial.println(i);
+    //   note_timers[i] = 0;
+    //   notes[i]->set_frequency(0);
+    //   // notes[i]->note_off();
+    //   gains[i] = 0;
+    // } else if(note_timers[i] > 0) {
+    //   // note still rockin
+    // }
 
-      note_timers[i] = 0;
-      notes[i]->set_frequency(0);
-      // notes[i]->note_off();
-      gains[i] = 0;
-    } else if(note_timers[i] > 0) {
-      // note still rockin
-      gains[i] = notes[i]->env_next();
+    note_playing = notes[i]->is_playing();
+
+
+    unsigned int this_gain = notes[i]->env_next();
+      
+    // is the note still held and is it time to go
+    if(!note_playing || note_delays[i]->ready()){
+      // Serial.println("I'm done");
+      notes[i]->note_off();
+      // held_down_note = -1;
+      
+    } else {
+      // Serial.println("I'm playing");
+      gains[i] = this_gain;
     }
-
   }
 }
 
@@ -360,12 +400,13 @@ int updateAudio(){
   int sig = 0;
   // unsigned int gain = 0;
   // int active_sigs = 0;
-
+  bool a_note_is_playing = false;
   // get vals from all playing notes
   for(int i=0; i<4; i++){
 
     // 0 frequency means note is dead :(
-    if(notes[i]->get_frequency() > 0){
+    if(notes[i]->is_playing()){
+       a_note_is_playing = true;
       // found note, play dat
       // sig += notes[i]->osc_next();
       sigs[i] = notes[i]->osc_next();
@@ -383,6 +424,9 @@ int updateAudio(){
 
   // return (int) (gain * sig)>>8;
 
+  if(!a_note_is_playing){
+    sig = 0;
+  }
   return (int) sig>>8;
   // char dasig = low_pass.next((gain*sig));
   // return (int) low_pass.next(sig)>>8;
