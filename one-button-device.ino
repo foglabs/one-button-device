@@ -30,7 +30,7 @@ Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aSin2(SIN2048_DATA);
 Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aSin3(SIN2048_DATA);
 
 // use #define for CONTROL_RATE, not a constant
-#define CONTROL_RATE 256 // Hz, powers of 2 are most reliable
+#define CONTROL_RATE 128 // Hz, powers of 2 are most reliable
 ADSR <CONTROL_RATE, CONTROL_RATE> envelope0;
 ADSR <CONTROL_RATE, CONTROL_RATE> envelope1;
 ADSR <CONTROL_RATE, CONTROL_RATE> envelope2;
@@ -40,7 +40,7 @@ EventDelay button_off_delay = EventDelay(10);
 EventDelay button_on_delay = EventDelay(100);
 
 int held_down_note = -1;
-bool button_state = digitalRead(2);
+// bool button_state = digitalRead(2);
 int input_freq = 440;
 
 long note_timers[4];
@@ -65,6 +65,7 @@ class Note {
     void note_off(bool);
 
     bool is_playing();
+    void set_is_playing(bool);
 
     int get_frequency();
     void set_frequency(int);
@@ -98,50 +99,59 @@ Note::Note(int init_osc_index, int init_freq){
 
 }
 
-bool Note::is_playing(){
+// only in updastecontrol! 
+void Note::set_is_playing(bool timer_was_up){
   // if(osc_index == 0){
-  //   return envelope0.playing();
+  //   playing = envelope0.playing();
   // } else if(osc_index == 1){
-  //   return envelope1.playing();
+  //   playing = envelope1.playing();
   // } else if(osc_index == 2){
-  //   return envelope2.playing();
+  //   playing = envelope2.playing();
   // } else if(osc_index == 3){
-  //   return envelope3.playing();
+  //   playing = envelope3.playing();
   // } else {
-  //   return false;
+  //   playing = false;
   // }
+  playing = timer_was_up;
+
+}
+
+bool Note::is_playing(){
   return playing;
 }
+
 
 int Note::get_osc_index(){
   return osc_index;
 }
 
 void Note::note_off(bool kill=false){
-  // begin tail off
-  if(osc_index == 0){
-    // Serial.println("I did my notofos");
-    envelope0.noteOff();
-  } else if(osc_index == 1){
+  if(playing){
+    // begin tail off
+    if(osc_index == 0){
+      // Serial.println("I did my notofos");
+      envelope0.noteOff();
+    } else if(osc_index == 1){
 
-    envelope1.noteOff();
-  } else if(osc_index == 2){
+      envelope1.noteOff();
+    } else if(osc_index == 2){
 
-    envelope2.noteOff();
-  } else if(osc_index == 3){
+      envelope2.noteOff();
+    } else if(osc_index == 3){
 
-    envelope3.noteOff();
+      envelope3.noteOff();
+    }
   }
-
-  // deflag dat
-  if(kill){
+  
+  // // deflag dat
+  // if(kill){
     playing = false;
-  }
+  // }
 }
 
 void Note::note_on(){
   playing = true;
-  
+
   int oi = get_osc_index();
   if(oi == 0){
     // Serial.println("note on");
@@ -238,6 +248,8 @@ Note note3 = Note(3, 0);
 void play_note(int freq){
   int available_slot = 0;
   for(int i=0; i<4; i++){
+    Serial.println("is_palying was");
+    Serial.println(notes[i]->is_playing());
     if(notes[i]->is_playing() == false){
       available_slot = i;
       break;
@@ -259,14 +271,8 @@ void play_note(int freq){
   notes[available_slot]->note_on();
 
   // total time of all envelope parts
-  note_delays[available_slot]->start(3000);
+  note_delays[available_slot]->start(40000);
 }
-
-// int mixTwo(int signal_1, int signal2){
-
-
-// }
-
 
 void setup(){
 
@@ -293,13 +299,13 @@ void setup(){
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
     
-  unsigned int a_t = 4;
+  unsigned int a_t = 800;
   byte a_level = 255;
-  unsigned int d_t = 40;
+  unsigned int d_t = 800;
   byte d_level = 255;
-  unsigned int s_t = 200;
+  unsigned int s_t = 4000;
   byte s_level = 0;
-  unsigned int r_t = 20;
+  unsigned int r_t = 800;
   byte r_level = 0;
 
   // aSin0.setFreq(freq);
@@ -327,106 +333,91 @@ void setup(){
   envelope3.update();
 }
 
-bool note_on_locked = false;
 
-// void updateControl(){
+bool button_state = false;
+bool last_button_state = false;
+long last_debounce_time = mozziMicros();
+// 10ms
+uint8_t debounce_delay = 10000;
 
-//   button_state = digitalRead(2);
-
-//   // put changing controls in here
-//   // if(button_state && mozziMicros() > now + 10000){
-//   //   freq += 1;
-//   //   if(freq > 1000){
-//   //     freq = 0;
-//   //   }
-//   //   aSin.setFreq(freq);
-//   //   now = mozziMicros();
-//   // }
-//   if(!button_state && button_on_delay.ready()){
-//     note_on_locked = false;
-//   }
-
-
-//   // ready for note and button down and not playing note and held for 10ms
-//   if(!note_on_locked && button_state && held_down_note<0){
-//     // init playing
-//     Serial.println("Button state true");
-//     play_note(input_freq);
-//     note_on_locked = true;
-//     button_on_delay.start();
-//   } else if(!button_state && held_down_note>=0) {
-//     // I stopped holding
-//     Serial.println("time for note off on osc");
-//     Serial.println(held_down_note);
-//     // notes[held_down_note]->note_off();
-//     // button_off_delay.start();
-//     held_down_note = -1;
-//     note_on_locked = false;
-//   }  
-
-//   for(int i=0; i<4; i++){
-
-//       // unsigned int this_gain = notes[i]->env_next();
-//     // is the note still held and is it time to go
-//     // if(!button_state && held_down_note >= 0 && held_down_note != i){
-//     //   Serial.println("I turned note off");
-//     //   Serial.println(held_down_note);
-//     //   notes[held_down_note]->note_off();
-//     // }
-          
-//     // if(notes[i]->is_playing()){
-//         // Serial.println("NOTE is playing:");
-//         // Serial.println(i);
-//       if(held_down_note != i){
-
-//         // do regular note off if button not held for this note
-//         notes[i]->note_off();
-
-//       } else if(note_delays[i]->ready()){
-//         Serial.println("I'm done");
-        
-//         // kill that bitch, timer is up
-//         notes[i]->note_off(true);
-//       }
-//     // }
-
-//     // update this at control pace, keep .nexting in updateAudio
-//     notes[i]->update_envelope();
-//   }
-
-
-// }
 void updateControl() {
-  button_state = digitalRead(2);
+  // read the state of the switch into a local variable:
+  bool reading = digitalRead(2);
+
+  // check to see if you just pressed the button
+  // (i.e. the input went from LOW to HIGH), and you've waited long enough
+  // since the last press to ignore any noise:
+
+  // If the switch changed, due to noise or pressing:
+  if (reading != last_button_state) {
+    // reset the debouncing timer
+    last_debounce_time = mozziMicros();
+    Serial.println("Raeding was note same");
+  }
+
+  if ((mozziMicros() - last_debounce_time) > debounce_delay) {
+    // whatever the reading is at, it's been there for longer than the debounce
+    // delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (reading != button_state) {
+      button_state = reading;
+
+      // only toggle the LED if the new button state is HIGH (uh)
+      if (button_state && held_down_note<0) {
+        // ledState = !ledState;
+        Serial.println("Shit bitch I played a note");
+        play_note(input_freq);
+        Serial.println(held_down_note);
+
+      } else if(!button_state) {
+        Serial.println("No more note held");
+        // no more note held
+        // regular note held is set in play_note
+        held_down_note = -1;
+      }
+    }
+  }
+
+  // digitalWrite(ledPin, ledState);
+
+  // save the reading. Next time through the loop, it'll be the lastButtonState:
+  last_button_state = reading;
 
   for(int i=0; i<4; i++){
+    // Serial.println(notes[i]->is_playing());
 
-    if(held_down_note != i){
+    // have to set this here because envelope runs at control rate!
+    bool is_playing = notes[i]->is_playing() && !note_delays[i]->ready();
+    notes[i]->set_is_playing(is_playing);
+    // Serial.println("Note 0");
+    // Serial.println(notes[0]->is_playing());
+    // Serial.println("Note 1");
+    // Serial.println(notes[1]->is_playing());
+    // Serial.println("Note 2");
+    // Serial.println(notes[2]->is_playing());
+    // Serial.println("Note 3");
+    // Serial.println(notes[3]->is_playing());
+    
+    
+    if(notes[i]->is_playing() && held_down_note != i){
+      Serial.println("Note goin off now");
+      Serial.println(i);
       // do regular note off if button not held for this note
       notes[i]->note_off();
-
-    } else if(note_delays[i]->ready()){
-      Serial.println("I'm done");
-      
-      // kill that bitch, timer is up
-      notes[i]->note_off(true);
     }
+    // } else if(note_delays[i]->ready()){
+    //   Serial.println("I'm done");
+      
+    //   // kill that bitch, timer is up
+    //   notes[i]->note_off(true);
+    // }
 
     // update these at control pace, keep .nexting in updateAudio
     notes[i]->update_envelope();
   }
-
-  if(held_down_note<0 && !note_on_locked && button_state) {
-    play_note(input_freq);
-    button_on_delay.start();
-    note_on_locked = true;
-  }
-
-  if(button_on_delay.ready()){
-    note_on_locked = false;
-  }
-
 }
+
 int updateAudio(){
   int sig = 0;
 
@@ -437,11 +428,11 @@ int updateAudio(){
   for(int i=0; i<4; i++){
 
     if(notes[i]->is_playing()){
-      // found note, play dat
-
-        active_sigs += 1;
-        sig += (notes[i]->env_next() * notes[i]->osc_next());
+    // found note, play dat
+      active_sigs += 1;
     }
+
+    sig += (notes[i]->env_next() * notes[i]->osc_next());
   }
   
   // average sigs if multiple
