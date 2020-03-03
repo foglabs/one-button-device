@@ -21,23 +21,20 @@
 #include <Oscil.h> // oscillator template
 #include <ADSR.h>
 #include <LowPassFilter.h>
-#include <tables/sin2048_int8.h> // sine table for oscillator
+#include <tables/sin8192_int8.h> // sine table for oscillator
 
 // use: Oscil <table_size, update_rate> oscilName (wavetable), look in .h file of table #included above
-Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aSin0(SIN2048_DATA);
-Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aSin1(SIN2048_DATA);
-Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aSin2(SIN2048_DATA);
-Oscil <SIN2048_NUM_CELLS, AUDIO_RATE> aSin3(SIN2048_DATA);
+Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin0(SIN8192_DATA);
+Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin1(SIN8192_DATA);
+Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin2(SIN8192_DATA);
+Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin3(SIN8192_DATA);
 
 // use #define for CONTROL_RATE, not a constant
-#define CONTROL_RATE 128 // Hz, powers of 2 are most reliable
-ADSR <CONTROL_RATE, CONTROL_RATE> envelope0;
-ADSR <CONTROL_RATE, CONTROL_RATE> envelope1;
-ADSR <CONTROL_RATE, CONTROL_RATE> envelope2;
-ADSR <CONTROL_RATE, CONTROL_RATE> envelope3;
-
-EventDelay button_off_delay = EventDelay(10);
-EventDelay button_on_delay = EventDelay(100);
+#define CONTROL_RATE 256 // Hz, powers of 2 are most reliable
+ADSR <AUDIO_RATE, AUDIO_RATE> envelope0;
+ADSR <AUDIO_RATE, AUDIO_RATE> envelope1;
+ADSR <AUDIO_RATE, AUDIO_RATE> envelope2;
+ADSR <AUDIO_RATE, AUDIO_RATE> envelope3;
 
 int held_down_note = -1;
 // bool button_state = digitalRead(2);
@@ -71,7 +68,7 @@ class Note {
     void set_frequency(int);
     void update_envelope();
     int osc_next();
-    int env_next();
+    unsigned int env_next();
     int get_osc_index();
 };
 
@@ -155,16 +152,16 @@ void Note::note_on(){
   int oi = get_osc_index();
   if(oi == 0){
     // Serial.println("note on");
-    envelope0.noteOn();
+    envelope0.noteOn(true);
   } else if(oi == 1){
 
-    envelope1.noteOn();
+    envelope1.noteOn(true);
   } else if(oi == 2){
 
-    envelope2.noteOn();
+    envelope2.noteOn(true);
   } else if(oi == 3){
 
-    envelope3.noteOn();
+    envelope3.noteOn(true);
   }
 
 }
@@ -213,7 +210,7 @@ int Note::osc_next(){
   // return note_oscs[osc_index].next();
 }
 
-int Note::env_next(){
+unsigned int Note::env_next(){
   // modify that shit based on current control vals
   if(osc_index == 0){
     // Serial.println("enve 0");
@@ -275,9 +272,6 @@ void play_note(int freq){
 }
 
 void setup(){
-
-  button_off_delay.start();
-  button_on_delay.start();
 
   Serial.begin(9600);
   startMozzi(CONTROL_RATE); // :)
@@ -414,7 +408,7 @@ void updateControl() {
     // }
 
     // update these at control pace, keep .nexting in updateAudio
-    notes[i]->update_envelope();
+    
   }
 }
 
@@ -426,6 +420,7 @@ int updateAudio(){
 
   // get vals from all playing notes
   for(int i=0; i<4; i++){
+    notes[i]->update_envelope();
 
     if(notes[i]->is_playing()){
     // found note, play dat
@@ -441,10 +436,6 @@ int updateAudio(){
     // Serial.println("I divided by");
     // Serial.println(active_sigs);
   }
-  return (int) sig>>8;
-
-
-
   // simplest
   // int sig = 0;
   // for(uint8_t i=0;i<4;i++){
@@ -452,6 +443,13 @@ int updateAudio(){
   // }
   // return (int) sig>>8;
 
+  // Serial.println(notes[0]->env_next());
+  // return (int) (notes[0]->osc_next() * (notes[0]->env_next()/256))>>8;
+
+  // yay!
+  // return (int) (envelope0.next() * aSin0.next())>>8;
+  
+  return (int) sig>>8;
 }
 
 void loop(){
