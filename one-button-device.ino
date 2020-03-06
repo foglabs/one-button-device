@@ -38,17 +38,19 @@ ADSR <AUDIO_RATE, AUDIO_RATE> envelope3;
 
 LowPassFilter lpf;
 
-int held_down_note = -1;
+bool play_arp = false;
+
+int current_note = -1;
 // bool button_state = digitalRead(2);
 long input_freq = 440;
 
-long note_timers[4];
 unsigned int gains[4];
 unsigned int gain = 0;
 
-int max_osc = 0;
-int min_osc = 0;
-
+uint8_t mode = 1;
+#define REGNOTEMODE 0
+#define ARPMODE 1
+#define WEIRDMODE 2
 
 class Note {
   private:
@@ -85,20 +87,14 @@ Note::Note(int init_osc_index, int init_freq){
   if(freq > 0){
     if(osc_index == 0){
       aSin0.setFreq(freq);
-
     } else if(osc_index == 1){
       aSin1.setFreq(freq);
-
     } else if(osc_index == 2){
       aSin2.setFreq(freq);
-
-
     } else if(osc_index == 3){
       aSin3.setFreq(freq);
-
     }
   }
-
 }
 
 // only in updastecontrol! 
@@ -115,13 +111,11 @@ void Note::set_playing(bool timer_was_up){
   //   playing = false;
   // }
   playing = timer_was_up;
-
 }
 
 bool Note::is_playing(){
   return playing;
 }
-
 
 bool Note::is_available(){
   return available;
@@ -153,10 +147,7 @@ void Note::note_off(bool kill=false){
     }
   }
   
-  // // deflag dat
-  // if(kill){
-    playing = false;
-  // }
+  playing = false;
 }
 
 void Note::note_on(){
@@ -209,7 +200,6 @@ void Note::update_envelope(){
 }
 
 int Note::osc_next(){
-
   // modify that shit based on current control vals
   if(osc_index == 0){
     return (int)aSin0.next();
@@ -220,7 +210,6 @@ int Note::osc_next(){
   } else if(osc_index == 3){
     return (int)aSin3.next();
   }
-  // return note_oscs[osc_index].next();
 }
 
 unsigned int Note::env_next(){
@@ -244,20 +233,30 @@ unsigned int Note::env_next(){
   }
 }
 
+// this is for timing out arp notes
+EventDelay arp_delay = EventDelay(1200);
 Note *notes[4];
 EventDelay *note_delays[4];
 
-// Note new_note = Note(0, 0);
 Note note0 = Note(0, 0);
 Note note1 = Note(1, 0);
 Note note2 = Note(2, 0);
 Note note3 = Note(3, 0);
 
+uint8_t arp_note_index = 0;
+
 long rando;
 
-// int sigs[4] = {0,0,0,0};
 
-void play_note(int freq){
+// button stuff
+bool button_state = false;
+bool last_button_state = false;
+long last_debounce_time = mozziMicros();
+// 10ms
+uint8_t debounce_delay = 10000;
+
+
+void play_note(int freq, unsigned int delay_time){
   int available_slot = 0;
   for(int i=0; i<4; i++){
     Serial.println("is_palying was");
@@ -272,21 +271,110 @@ void play_note(int freq){
 
   // Serial.println("Maybe it fucking worked");
   // Serial.println(notes[available_slot]->get_frequency());
-  held_down_note = available_slot;
-
-  // set timer for new note
-  // note_timers[available_slot] = mozziMicros();
-
+  current_note = available_slot;
     
   Serial.println("Running ::note_on for ");
   Serial.println(available_slot);
   notes[available_slot]->note_on();
 
-  // total time of all envelope parts
-  // note_delays[available_slot]->start(40000);
+  if(delay_time > 0){
+    // for arp, set a timer to know when to note off
+    note_delays[available_slot]->start(delay_time);
+  }
 }
 
+int next_arp_note(){
+  switch (arp_note_index) {
+    case 0: return 440;
+        break;
+    case 1: return 540;
+        break;
+    case 2: return 640;
+        break;
+    case 3: return 740;
+        break;
+    case 4: return 840;
+        break;
+    case 5: return 940;
+        break;
+    case 6: return 1040;
+        break;
+    case 7: return 1140;
+        break;
+    case 8: return 1240;
+        break;
+    case 9: return 1340;
+        break;
+    case 10: return 1440;
+        break;
+    case 11: arp_note_index = 0;
+        return 1540;
+        break;
+    default: return 440;
+  }
+}
+
+void play_arp_notes(){
+  if(arp_delay.ready()){
+    int next_freq = next_arp_note();
+    arp_note_index += 1;
+    play_note(next_freq, 800);
+    arp_delay.start(1200);
+  }
+}
+
+void handle_note_button(){
+  // read the state of the switch into a local variable:
+  bool reading = digitalRead(2);
+
+  // check to see if you just pressed the button
+  // (i.e. the input went from LOW to HIGH), and you've waited long enough
+  // since the last press to ignore any noise:
+
+  // If the switch changed, due to noise or pressing:
+  if (reading != last_button_state) {
+    // reset the debouncing timer
+    last_debounce_time = mozziMicros();
+    // Serial.println("Raeding was note same");
+  }
+
+  if ((mozziMicros() - last_debounce_time) > debounce_delay) {
+    // whatever the reading is at, it's been there for longer than the debounce
+    // delay, so take it as the actual current state:
+
+    // if the button state has changed:
+    if (reading != button_state) {
+      button_state = reading;
+
+      // only toggle the LED if the new button state is HIGH (uh)
+      if (button_state && current_note<0) {
+
+        // HERE MEANS I"M GOING TO start PLAYing SOMTHING
+        if(mode == REGNOTEMODE){
+          input_freq = random(130, 4186);
+          play_note(input_freq, 0);
+        } else if(mode == ARPMODE){
+          play_arp = true;
+        }
+        
+      } else if(!button_state) {
+        // Serial.println("No more note held");
+        // no more note held
+        // regular note held is set in play_note
+        current_note = -1;
+        play_arp = false;
+      }
+    }
+  }
+
+  // save the reading. Next time through the loop, it'll be the lastButtonState:
+  last_button_state = reading;
+}
+
+
 void setup(){
+  arp_delay.start(1000);
+
   lpf.setResonance(200);
   lpf.setCutoffFreq(6000);
   randomSeed(analogRead(0));
@@ -302,6 +390,8 @@ void setup(){
   notes[2] = &note2;
   notes[3] = &note3;
 
+
+  // these are for letting notes play out their envs!
   EventDelay event_delay0 = EventDelay(3000);
   EventDelay event_delay1 = EventDelay(3000);
   EventDelay event_delay2 = EventDelay(3000);
@@ -310,7 +400,8 @@ void setup(){
   note_delays[1] = &event_delay1;
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
-    
+
+
   unsigned int a_t = 120;
   byte a_level = 255;
   unsigned int d_t = 300;
@@ -345,58 +436,13 @@ void setup(){
   envelope3.update();
 }
 
-
-bool button_state = false;
-bool last_button_state = false;
-long last_debounce_time = mozziMicros();
-// 10ms
-uint8_t debounce_delay = 10000;
-
 void updateControl() {
-  // read the state of the switch into a local variable:
-  bool reading = digitalRead(2);
+  // check if note buttons down/ready for action -> if so, play note!
+  handle_note_button();
 
-  // check to see if you just pressed the button
-  // (i.e. the input went from LOW to HIGH), and you've waited long enough
-  // since the last press to ignore any noise:
-
-  // If the switch changed, due to noise or pressing:
-  if (reading != last_button_state) {
-    // reset the debouncing timer
-    last_debounce_time = mozziMicros();
-    // Serial.println("Raeding was note same");
+  if(play_arp){
+    play_arp_notes();
   }
-
-  if ((mozziMicros() - last_debounce_time) > debounce_delay) {
-    // whatever the reading is at, it's been there for longer than the debounce
-    // delay, so take it as the actual current state:
-
-    // if the button state has changed:
-    if (reading != button_state) {
-      button_state = reading;
-
-      // only toggle the LED if the new button state is HIGH (uh)
-      if (button_state && held_down_note<0) {
-        // ledState = !ledState;
-        // Serial.println("Shit bitch I played a note");
-        // rando = ;
-        input_freq = random(130, 4186);
-        play_note(input_freq);
-        // Serial.println(held_down_note);
-        
-      } else if(!button_state) {
-        // Serial.println("No more note held");
-        // no more note held
-        // regular note held is set in play_note
-        held_down_note = -1;
-      }
-    }
-  }
-
-  // digitalWrite(ledPin, ledState);
-
-  // save the reading. Next time through the loop, it'll be the lastButtonState:
-  last_button_state = reading;
 
   for(int i=0; i<4; i++){
     // Serial.println(notes[i]->is_playing());
@@ -412,21 +458,24 @@ void updateControl() {
     // Serial.println("Note 3");
     // Serial.println(notes[3]->is_playing());
     
-    
-    if(notes[i]->is_playing() && held_down_note != i){
-      Serial.println("Note goin off now");
-      Serial.println(i);
-      // do regular note off if button not held for this note
-      notes[i]->note_off();
-      note_delays[i]->start(800);
-      notes[i]->set_available(false);
-    } else if(note_delays[i]->ready()){
-      notes[i]->set_available(true);
+    if(mode == REGNOTEMODE){
+      if(notes[i]->is_playing() && current_note != i){
+        Serial.println("Note goin off now");
+        Serial.println(i);
+        // do regular note off if button not held for this note
+        notes[i]->note_off();
+        note_delays[i]->start(800);
+        notes[i]->set_available(false);
+      } else if(note_delays[i]->ready()){
+        notes[i]->set_available(true);
+      }  
+    } else if(mode == ARPMODE) {
+      if(note_delays[i]->ready()){
+        notes[i]->note_off();
+        notes[i]->set_available(true);
+      } 
+
     }
-
-
-
-    // update these at control pace, keep .nexting in updateAudio
     
   }
 }
@@ -441,33 +490,20 @@ int updateAudio(){
   for(int i=0; i<4; i++){
     notes[i]->update_envelope();
 
-    if(!notes[i]->is_available()){
-    // found note, play dat
-      active_sigs += 1;
-    }
+    // if(!notes[i]->is_available()){
+    // // found note, play dat
+    //   active_sigs += 1;
+    // }
 
     sig += ( notes[i]->env_next() * lpf.next(notes[i]->osc_next()) );
   }
-  
-  // average sigs if multiple
-  // if(active_sigs>1){
-  //   sig = sig/active_sigs;
-  //   Serial.println("I divided by");
-  //   Serial.println(active_sigs);
-  // }
+
   // simplest
   // int sig = 0;
   // for(uint8_t i=0;i<4;i++){
   //   sig += (notes[i]->osc_next() * gains[i]);
   // }
   // return (int) sig>>8;
-  
-  // Serial.println(notes[0]->env_next());
-  // return (int) (notes[0]->osc_next() * (notes[0]->env_next()/256))>>8;
-
-  // yay!
-  // return (int) (envelope0.next() * aSin0.next())>>8;
-  
   return (int) sig>>8;
 }
 
