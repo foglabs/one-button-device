@@ -21,6 +21,7 @@
 #include <Oscil.h> // oscillator template
 #include <ADSR.h>
 #include <LowPassFilter.h>
+#include <mozzi_midi.h>
 #include <tables/sin8192_int8.h> // sine table for oscillator
 
 // use: Oscil <table_size, update_rate> oscilName (wavetable), look in .h file of table #included above
@@ -42,7 +43,7 @@ bool play_arp = false;
 
 int current_note = -1;
 // bool button_state = digitalRead(2);
-long input_freq = 440;
+int input_freq = 440;
 
 unsigned int gains[4];
 unsigned int gain = 0;
@@ -57,7 +58,7 @@ class Note {
     bool playing = false;
     bool available = true;
 
-    int freq;
+    float freq;
     int osc_index;
   public:
     Note(int, int);
@@ -71,8 +72,8 @@ class Note {
     bool is_available();
     void set_available(bool);
 
-    int get_frequency();
-    void set_frequency(int);
+    float get_frequency();
+    void set_frequency(float);
     void update_envelope();
     int osc_next();
     unsigned int env_next();
@@ -81,18 +82,18 @@ class Note {
 
 Note::Note(int init_osc_index, int init_freq){
   osc_index = init_osc_index;
-  int freq = init_freq;
+  // int freq = init_freq;
 
   // start this osc off with our freq
-  if(freq > 0){
+  if(init_freq > 0){
     if(osc_index == 0){
-      aSin0.setFreq(freq);
+      aSin0.setFreq(init_freq);
     } else if(osc_index == 1){
-      aSin1.setFreq(freq);
+      aSin1.setFreq(init_freq);
     } else if(osc_index == 2){
-      aSin2.setFreq(freq);
+      aSin2.setFreq(init_freq);
     } else if(osc_index == 3){
-      aSin3.setFreq(freq);
+      aSin3.setFreq(init_freq);
     }
   }
 }
@@ -170,11 +171,11 @@ void Note::note_on(){
 
 }
 
-int Note::get_frequency(){
+float Note::get_frequency(){
   return freq;
 }
 
-void Note::set_frequency(int new_freq){
+void Note::set_frequency(float new_freq){
   freq = new_freq;
   if(osc_index == 0){
     return aSin0.setFreq(new_freq);
@@ -234,7 +235,6 @@ unsigned int Note::env_next(){
 }
 
 // this is for timing out arp notes
-EventDelay arp_delay = EventDelay(1200);
 Note *notes[4];
 EventDelay *note_delays[4];
 
@@ -244,9 +244,9 @@ Note note2 = Note(2, 0);
 Note note3 = Note(3, 0);
 
 uint8_t arp_note_index = 0;
+EventDelay arp_delay = EventDelay(300);
 
 long rando;
-
 
 // button stuff
 bool button_state = false;
@@ -255,8 +255,7 @@ long last_debounce_time = mozziMicros();
 // 10ms
 uint8_t debounce_delay = 10000;
 
-
-void play_note(int freq, unsigned int delay_time){
+void play_note(int new_note, unsigned int delay_time){
   int available_slot = 0;
   for(int i=0; i<4; i++){
     Serial.println("is_palying was");
@@ -266,7 +265,11 @@ void play_note(int freq, unsigned int delay_time){
       break;
     }
   }
-
+  Serial.println("NOTE IS");
+  Serial.println(new_note);
+  float freq = note_to_freq(new_note);
+  Serial.println("FREQ IS");
+  Serial.println(freq);
   notes[available_slot]->set_frequency(freq);
 
   // Serial.println("Maybe it fucking worked");
@@ -283,43 +286,50 @@ void play_note(int freq, unsigned int delay_time){
   }
 }
 
+float note_to_freq(int midi_note){
+  // internet trash
+  // return (pow (2.0, ((float)(noter-69)/12.0))) * 440.0;
+  // return (pow (2.0, ((float)(noter-69.0)/12.0))) * 440.0;
+  return 440.0 * ( pow( 2.0, ((midi_note-69.0)/12.0) ) );
+}
+
 int next_arp_note(){
   switch (arp_note_index) {
-    case 0: return 440;
+    case 0: return 70;
         break;
-    case 1: return 540;
+    case 1: return 72;
         break;
-    case 2: return 640;
+    case 2: return 74;
         break;
-    case 3: return 740;
+    case 3: return 75;
         break;
-    case 4: return 840;
+    case 4: return 77;
         break;
-    case 5: return 940;
+    case 5: return 79;
         break;
-    case 6: return 1040;
+    case 6: return 81;
         break;
-    case 7: return 1140;
+    case 7: return 82;
         break;
-    case 8: return 1240;
+    case 8: return 84;
         break;
-    case 9: return 1340;
+    case 9: return 86;
         break;
-    case 10: return 1440;
+    case 10: return 87;
         break;
     case 11: arp_note_index = 0;
-        return 1540;
+        return 70;
         break;
-    default: return 440;
+    default: return 70;
   }
 }
 
 void play_arp_notes(){
   if(arp_delay.ready()){
-    int next_freq = next_arp_note();
+    int next_note = next_arp_note();
     arp_note_index += 1;
-    play_note(next_freq, 800);
-    arp_delay.start(1200);
+    play_note(next_note, 800);
+    arp_delay.start(300);
   }
 }
 
