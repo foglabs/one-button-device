@@ -1,34 +1,45 @@
-/*  Example playing a sinewave at a set frequency,
-    using Mozzi sonification library.
+/*  Get it innnnnn one button device
 
-    Demonstrates the use of Oscil to play a wavetable.
+controls
+  -rotary
+    reg note -> change semitone for *next* note
 
-    Circuit: Audio output on digital pin 9 on a Uno or similar, or
-    DAC/A14 on Teensy 3.1, or
-    check the README or http://sensorium.github.com/Mozzi/
+    arp -> base note for arp
 
-    Mozzi documentation/API
-    https://sensorium.github.io/Mozzi/doc/html/index.html
+    weird ->
+      raw freqency
 
-    Mozzi help/discussion/announcements:
-    https://groups.google.com/forum/#!forum/mozzi-users
+  -toggle switches
 
-    Tim Barrass 2012, CC by-nc-sa.
+
+  -display
+
+
+
 */
 
 #include <MozziGuts.h>
 #include <EventDelay.h>
 #include <Oscil.h> // oscillator template
 #include <ADSR.h>
+
+// effects stuff
 #include <LowPassFilter.h>
+#include <AudioDelay.h>
+#include <Phasor.h>
+
 #include <mozzi_midi.h>
 #include <tables/sin8192_int8.h> // sine table for oscillator
+#include <tables/cos8192_int8.h> // sine table for oscillator
 
 // use: Oscil <table_size, update_rate> oscilName (wavetable), look in .h file of table #included above
 Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin0(SIN8192_DATA);
 Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin1(SIN8192_DATA);
 Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin2(SIN8192_DATA);
 Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin3(SIN8192_DATA);
+
+// davibrato :D
+// Oscil<COS8192_NUM_CELLS, AUDIO_RATE> aVibrato(COS8192_DATA);
 
 // use #define for CONTROL_RATE, not a constant
 #define CONTROL_RATE 256 // Hz, powers of 2 are most reliable
@@ -37,7 +48,18 @@ ADSR <AUDIO_RATE, AUDIO_RATE> envelope1;
 ADSR <AUDIO_RATE, AUDIO_RATE> envelope2;
 ADSR <AUDIO_RATE, AUDIO_RATE> envelope3;
 
+// Effects objects
+bool toggles[4];
+// toggle this based on inputs
+bool effects_active = false;
 LowPassFilter lpf;
+
+
+uint16_t deltime = 200;
+uint16_t del_samps = 256;
+AudioDelay <256> aDel;
+
+Phasor <AUDIO_RATE> aPhasor1;
 
 bool play_arp = false;
 
@@ -48,11 +70,22 @@ int input_freq = 440;
 unsigned int gains[4];
 unsigned int gain = 0;
 
-uint8_t mode = 1;
+uint8_t mode = 0;
 #define REGNOTEMODE 0
 #define ARPMODE 1
 #define WEIRDMODE 2
+#define SWEEPMODE 3
 
+#define TOGGLE_0_PIN 3
+#define TOGGLE_1_PIN 4
+#define TOGGLE_2_PIN 5
+#define TOGGLE_3_PIN 6
+
+#define ROTARY_A_PIN 11
+#define ROTARY_B_PIN 12
+
+// this class wraps oscillators, when they're intended to be used for notes
+// need to make sure resetting them works, causes weird mode will probably bypass this
 class Note {
   private:
     bool playing = false;
@@ -168,7 +201,6 @@ void Note::note_on(){
 
     envelope3.noteOn(true);
   }
-
 }
 
 float Note::get_frequency(){
@@ -255,6 +287,12 @@ long last_debounce_time = mozziMicros();
 // 10ms
 uint8_t debounce_delay = 10000;
 
+// rotary
+int rotary_position = 0;
+int last_a;
+bool clockwise = false;
+
+
 void play_note(int new_note, unsigned int delay_time){
   int available_slot = 0;
   for(int i=0; i<4; i++){
@@ -327,13 +365,17 @@ int next_arp_note(){
 void play_arp_notes(){
   if(arp_delay.ready()){
     int next_note = next_arp_note();
+
+    // offset note by current rotary value!
+    next_note += rotary_position;
+
     arp_note_index += 1;
     play_note(next_note, 800);
     arp_delay.start(300);
   }
 }
 
-void handle_note_button(){
+void get_note_button(){
   // read the state of the switch into a local variable:
   bool reading = digitalRead(2);
 
@@ -361,10 +403,19 @@ void handle_note_button(){
 
         // HERE MEANS I"M GOING TO start PLAYing SOMTHING
         if(mode == REGNOTEMODE){
-          input_freq = random(130, 4186);
-          play_note(input_freq, 0);
+          // input_freq = random(130, 4186);
+
+          // next note is C3 offset by current rotary value!
+          // Serial.print("Trying to play");
+          // Serial.println(48 + rotary_position);
+          Serial.print("rotary_position");
+          Serial.println(rotary_position);
+          // play_note(48 + rotary_position, 0);
+          play_note(72 + rotary_position, 0);
         } else if(mode == ARPMODE){
           play_arp = true;
+        } else if(mode == WEIRDMODE){
+          // do some ol other shit
         }
         
       } else if(!button_state) {
@@ -381,12 +432,88 @@ void handle_note_button(){
   last_button_state = reading;
 }
 
+// void get_rotary() {
+//   bool aVal = digitalRead(ROTARY_A_PIN);
+//   if(aVal != last_a){
+//     // Means the knob is rotating// if the knob is rotating, we need to determine direction// We do that by reading pin B.
+//     if(digitalRead(ROTARY_B_PIN) != aVal){
+//       // Means pin A Changed first -We're RotatingClockwise.
+//       rotary_position++;
+//       // clockwise = true;
+//       Serial.println("Rotary ++");
+//       Serial.print("Rotary is now");
+//   Serial.println(rotary_position);  
+//     } else {
+//       // Otherwise B changedfirst and we're moving CCW
+//       // clockwise = false;
+//       rotary_position--;
+//       Serial.println("Rotary --");
+//         Serial.print("Rotary is now");
+//         Serial.println(rotary_position);
+//     }
+//     // Serial.print ("Rotated: ");
+//     // if(clockwise){
+//     //   Serial.println ("clockwise");
+//     // } else {
+//     //   Serial.println("counterclockwise");
+//     // }
+//     // Serial.print("Encoder Position: ");
+//     // Serial.println(rotary_position);
+//   }
+//   last_a = aVal;
+// }
+
+void get_toggles() {
+  for(uint8_t i=3; i<6; i++){
+    toggles[i] = digitalRead(i);
+  }
+}
+
+// effects helpers
+bool delay_enabled(){
+  return toggles[0];
+}
+
+bool vibrato_enabled(){
+  return toggles[1];
+}
+
+int render_effects(int signal) {
+  if(delay_enabled()){
+    // do delay
+    signal = aDel.next((int8_t)signal, del_samps);
+  }
+
+  // if(vibrato_enabled()){
+  //   // do phaser
+  //   float 
+  //   signal = aVibrato.phMod();
+  // }
+
+  return signal;
+}
+
 
 void setup(){
   arp_delay.start(1000);
 
   lpf.setResonance(200);
   lpf.setCutoffFreq(6000);
+
+  // float phase_freq = 55.f;
+  // aPhasor1.setFreq(phase_freq);
+  
+  // byte vib_intensity = 255;
+  // aVibrato.setFreq(15.f);
+
+  
+  // -128 to 127
+  // for udpatecontrol
+  // aDel.setFeedbackLevel(-111);
+  // this is how used in updateaudio
+  // return asig/8 + aDel.next(asig, deltime); // mix some straight signal with the delayed signal
+
+  // seed dat
   randomSeed(analogRead(0));
 
   Serial.begin(9600);
@@ -410,7 +537,6 @@ void setup(){
   note_delays[1] = &event_delay1;
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
-
 
   unsigned int a_t = 120;
   byte a_level = 255;
@@ -447,46 +573,87 @@ void setup(){
 }
 
 void updateControl() {
+  // increment that bad boy
+
+  // rotary_position++;
+  // Serial.println(rotary_position);
+  // get_rotary();
+
+  // why the fuck does this only work out here?!
+  bool aVal = digitalRead(ROTARY_A_PIN);
+  if(aVal != last_a){
+    // Means the knob is rotating// if the knob is rotating, we need to determine direction// We do that by reading pin B.
+    if(digitalRead(ROTARY_B_PIN) != aVal){
+      // Means pin A Changed first -We're RotatingClockwise.
+      rotary_position++;
+      // clockwise = true;
+      Serial.println("Rotary ++");
+      Serial.print("Rotary is now");
+  Serial.println(rotary_position);  
+    } else {
+      // Otherwise B changedfirst and we're moving CCW
+      // clockwise = false;
+      rotary_position--;
+      Serial.println("Rotary --");
+        Serial.print("Rotary is now");
+        Serial.println(rotary_position);
+    }
+    // Serial.print ("Rotated: ");
+    // if(clockwise){
+    //   Serial.println ("clockwise");
+    // } else {
+    //   Serial.println("counterclockwise");
+    // }
+    // Serial.print("Encoder Position: ");
+    // Serial.println(rotary_position);
+  }
+  last_a = aVal;
+
+
+
+
+
   // check if note buttons down/ready for action -> if so, play note!
-  handle_note_button();
+  get_note_button();
+  // just set em into toggles[]
+  get_toggles();
+
 
   if(play_arp){
+    Serial.println("Im Playin arp");
     play_arp_notes();
   }
 
+  // handle events for oscillatorsz
   for(int i=0; i<4; i++){
     // Serial.println(notes[i]->is_playing());
 
-    // have to set this here because envelope runs at control rate!
-    // bool is_playing = notes[i]->is_playing() && !note_delays[i]->ready();
-    // Serial.println("Note 0");
-    // Serial.println(notes[0]->is_playing());
-    // Serial.println("Note 1");
-    // Serial.println(notes[1]->is_playing());
-    // Serial.println("Note 2");
-    // Serial.println(notes[2]->is_playing());
-    // Serial.println("Note 3");
-    // Serial.println(notes[3]->is_playing());
-    
     if(mode == REGNOTEMODE){
+      
       if(notes[i]->is_playing() && current_note != i){
-        Serial.println("Note goin off now");
-        Serial.println(i);
+        // Serial.println("Note goin off now");
+        // Serial.println(i);
         // do regular note off if button not held for this note
         notes[i]->note_off();
         note_delays[i]->start(800);
         notes[i]->set_available(false);
       } else if(note_delays[i]->ready()){
+
         notes[i]->set_available(true);
-      }  
+      }
+
     } else if(mode == ARPMODE) {
+      
       if(note_delays[i]->ready()){
         notes[i]->note_off();
         notes[i]->set_available(true);
-      } 
+      }
 
+    } else if(mode == WEIRDMODE){
+
+    } else if(mode == SWEEPMODE){
+      
     }
-    
   }
 }
 
@@ -514,6 +681,11 @@ int updateAudio(){
   //   sig += (notes[i]->osc_next() * gains[i]);
   // }
   // return (int) sig>>8;
+
+  if(effects_active){
+    sig = render_effects(sig);
+  }
+
   return (int) sig>>8;
 }
 
