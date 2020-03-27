@@ -15,6 +15,8 @@ controls
   -display
 
 
+Cancel button?
+
 
 */
 
@@ -26,7 +28,7 @@ controls
 // effects stuff
 #include <LowPassFilter.h>
 #include <AudioDelay.h>
-#include <Phasor.h>
+// #include <Phasor.h>
 
 #include <mozzi_midi.h>
 #include <tables/sin8192_int8.h> // sine table for oscillator
@@ -49,17 +51,17 @@ ADSR <AUDIO_RATE, AUDIO_RATE> envelope2;
 ADSR <AUDIO_RATE, AUDIO_RATE> envelope3;
 
 // Effects objects
-bool toggles[4];
+bool toggles[4] = {false,false,false,false};
 // toggle this based on inputs
 bool effects_active = false;
 LowPassFilter lpf;
 
 
-uint16_t deltime = 200;
-uint16_t del_samps = 256;
+// is 'cells', some bs-ass measure from mozzi
+uint16_t flange_samps = 512;
 AudioDelay <256> aDel;
 
-Phasor <AUDIO_RATE> aPhasor1;
+// Phasor <AUDIO_RATE> aPhasor1;
 
 bool play_arp = false;
 
@@ -288,7 +290,7 @@ long last_debounce_time = mozziMicros();
 uint8_t debounce_delay = 10000;
 
 // rotary
-int rotary_position = 0;
+int rotary_position = 12;
 int last_a;
 bool clockwise = false;
 
@@ -432,56 +434,95 @@ void get_note_button(){
   last_button_state = reading;
 }
 
-// void get_rotary() {
-//   bool aVal = digitalRead(ROTARY_A_PIN);
-//   if(aVal != last_a){
-//     // Means the knob is rotating// if the knob is rotating, we need to determine direction// We do that by reading pin B.
-//     if(digitalRead(ROTARY_B_PIN) != aVal){
-//       // Means pin A Changed first -We're RotatingClockwise.
-//       rotary_position++;
-//       // clockwise = true;
-//       Serial.println("Rotary ++");
-//       Serial.print("Rotary is now");
-//   Serial.println(rotary_position);  
-//     } else {
-//       // Otherwise B changedfirst and we're moving CCW
-//       // clockwise = false;
-//       rotary_position--;
-//       Serial.println("Rotary --");
-//         Serial.print("Rotary is now");
-//         Serial.println(rotary_position);
-//     }
-//     // Serial.print ("Rotated: ");
-//     // if(clockwise){
-//     //   Serial.println ("clockwise");
-//     // } else {
-//     //   Serial.println("counterclockwise");
-//     // }
-//     // Serial.print("Encoder Position: ");
-//     // Serial.println(rotary_position);
-//   }
-//   last_a = aVal;
-// }
-
-void get_toggles() {
-  for(uint8_t i=3; i<6; i++){
-    toggles[i] = digitalRead(i);
-  }
-}
-
 // effects helpers
-bool delay_enabled(){
+bool flanger_enabled(){
   return toggles[0];
 }
 
-bool vibrato_enabled(){
+bool compressor_enabled(){
   return toggles[1];
 }
 
+
+
+// bool waveshaper_enabled(){
+//   return toggles[1] == 1;
+// }
+
+// bool vibrato_enabled(){
+//   return toggles[1];
+// }
+
+void set_effects() {
+  for(uint8_t i=0; i<4; i++){
+    // bool newtoggle = digitalRead(i);
+
+    // if(newtoggle != toggles[i]){
+    //   Serial.print(i);
+    //   Serial.print(" Changed to ");
+    //   Serial.println(newtoggle);
+    // }
+
+    toggles[i] = digitalRead(i+3);
+    // toggles[i] = true;
+  }
+}
+
+
+
+#define THRESHOLD -20.0
+#define WIDTH 6.0
+#define LOWER -23.0
+#define UPPER -17.0
+#define RATIO 3.0
+#define SLOPE -2.0
+// #define SOFTSLOPEFACTOR -1.0/6.0;
+
+int render_compressor(int signal){
+
+  // keep this here!
+  // take away the sign
+  // float amplitude = abs(signal/256);
+
+  // convert 0-1 amp to db;
+  float sig_db = 20 * log10(abs(signal/256));
+
+  // float threshold = -20.0;
+  // // knee?
+  // float width = 6.0;
+
+  // float lower = threshold - (width * 0.5);
+  // float upper = threshold + (width * 0.5);
+  // float ratio = 3.0;
+  // float slope = 1.0f - ratio;
+
+  if (sig_db <= LOWER){
+    return 0;
+  } else if (sig_db <= UPPER){
+    // float soft_slope = SLOPE * ((sig_db - LOWER) / WIDTH) * 0.5;
+    return (int) ((1.0/6.0) * (sig_db-LOWER)) * (LOWER - sig_db);
+  } else {
+    return (int) SLOPE * (THRESHOLD - sig_db);
+  }
+}
+
 int render_effects(int signal) {
-  if(delay_enabled()){
+  if(flanger_enabled()){
     // do delay
-    signal = aDel.next((int8_t)signal, del_samps);
+    signal = signal + aDel.next((int8_t)signal, 512);
+  }
+
+  // if(waveshaper_enabled()){
+  //   // float max = 20;
+  //   // signal = (int) (signal > max) ? max : (signal < -max) ? -max : signal;
+
+  //   // softclip from Q
+  //   Serial.println("Wave");
+  //   signal = (int) 270 * signal - 90 * signal * signal * signal;
+  // }
+
+  if(compressor_enabled()){
+    signal = signal + render_compressor(signal);
   }
 
   // if(vibrato_enabled()){
@@ -489,12 +530,15 @@ int render_effects(int signal) {
   //   float 
   //   signal = aVibrato.phMod();
   // }
-
-  return signal;
+  return (int) signal;
 }
 
-
 void setup(){
+  pinMode(TOGGLE_0_PIN, INPUT_PULLUP);
+  pinMode(TOGGLE_1_PIN, INPUT_PULLUP);
+  pinMode(TOGGLE_2_PIN, INPUT_PULLUP);
+  pinMode(TOGGLE_3_PIN, INPUT_PULLUP);
+
   arp_delay.start(1000);
 
   lpf.setResonance(200);
@@ -579,7 +623,7 @@ void updateControl() {
   // Serial.println(rotary_position);
   // get_rotary();
 
-  // why the fuck does this only work out here?!
+  // why the fuck does this only work out here?! inside void get_rotary() function, ++ behaves differently
   bool aVal = digitalRead(ROTARY_A_PIN);
   if(aVal != last_a){
     // Means the knob is rotating// if the knob is rotating, we need to determine direction// We do that by reading pin B.
@@ -616,7 +660,7 @@ void updateControl() {
   // check if note buttons down/ready for action -> if so, play note!
   get_note_button();
   // just set em into toggles[]
-  get_toggles();
+  set_effects();
 
 
   if(play_arp){
@@ -667,24 +711,15 @@ int updateAudio(){
   for(int i=0; i<4; i++){
     notes[i]->update_envelope();
 
-    // if(!notes[i]->is_available()){
-    // // found note, play dat
-    //   active_sigs += 1;
-    // }
-
+    // gain * filter(oscnext)
     sig += ( notes[i]->env_next() * lpf.next(notes[i]->osc_next()) );
   }
 
-  // simplest
-  // int sig = 0;
-  // for(uint8_t i=0;i<4;i++){
-  //   sig += (notes[i]->osc_next() * gains[i]);
-  // }
-  // return (int) sig>>8;
+  // if(true || effects_active){
 
-  if(effects_active){
-    sig = render_effects(sig);
-  }
+  // dry will just be passed along if not enabled
+  sig = render_effects(sig);
+  // }
 
   return (int) sig>>8;
 }
