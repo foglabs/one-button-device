@@ -28,6 +28,7 @@ Cancel button?
 // effects stuff
 #include <LowPassFilter.h>
 #include <AudioDelay.h>
+// #include <ReverbTank.h>
 // #include <Phasor.h>
 
 #include <mozzi_midi.h>
@@ -41,7 +42,7 @@ Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin2(SIN8192_DATA);
 Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin3(SIN8192_DATA);
 
 // davibrato :D
-// Oscil<COS8192_NUM_CELLS, AUDIO_RATE> aVibrato(COS8192_DATA);
+Oscil<COS8192_NUM_CELLS, AUDIO_RATE> aVibrato(COS8192_DATA);
 
 // use #define for CONTROL_RATE, not a constant
 #define CONTROL_RATE 256 // Hz, powers of 2 are most reliable
@@ -58,10 +59,11 @@ LowPassFilter lpf;
 
 
 // is 'cells', some bs-ass measure from mozzi
-uint16_t flange_samps = 512;
+uint8_t flange_samps = 512;
 AudioDelay <256> aDel;
 
 // Phasor <AUDIO_RATE> aPhasor1;
+// ReverbTank reverb;
 
 bool play_arp = false;
 
@@ -69,14 +71,11 @@ int current_note = -1;
 // bool button_state = digitalRead(2);
 int input_freq = 440;
 
-unsigned int gains[4];
-unsigned int gain = 0;
-
-uint8_t mode = 0;
 #define REGNOTEMODE 0
 #define ARPMODE 1
 #define WEIRDMODE 2
 #define SWEEPMODE 3
+uint8_t mode = REGNOTEMODE;
 
 #define TOGGLE_0_PIN 3
 #define TOGGLE_1_PIN 4
@@ -111,6 +110,7 @@ class Note {
     void set_frequency(float);
     void update_envelope();
     int osc_next();
+    int osc_phmod_next(Q15n16);
     unsigned int env_next();
     int get_osc_index();
 };
@@ -244,6 +244,19 @@ int Note::osc_next(){
     return (int)aSin2.next();
   } else if(osc_index == 3){
     return (int)aSin3.next();
+  }
+}
+
+int Note::osc_phmod_next(Q15n16 phasemod_val){
+  // modify that shit based on current control vals
+  if(osc_index == 0){
+    return (int)aSin0.phMod(phasemod_val);
+  } else if(osc_index == 1){
+    return (int)aSin1.phMod(phasemod_val);
+  } else if(osc_index == 2){
+    return (int)aSin2.phMod(phasemod_val);
+  } else if(osc_index == 3){
+    return (int)aSin3.phMod(phasemod_val);
   }
 }
 
@@ -443,15 +456,19 @@ bool compressor_enabled(){
   return toggles[1];
 }
 
-
+// too big for memory :/
+// bool reverb_enabled(){
+//   return toggles[2];
+// }
 
 // bool waveshaper_enabled(){
 //   return toggles[1] == 1;
 // }
 
-// bool vibrato_enabled(){
-//   return toggles[1];
-// }
+bool vibrato_enabled(){
+  // defined near osc_next
+  return toggles[3];
+}
 
 void set_effects() {
   for(uint8_t i=0; i<4; i++){
@@ -478,6 +495,10 @@ void set_effects() {
 #define SLOPE -2.0
 // #define SOFTSLOPEFACTOR -1.0/6.0;
 
+int render_phaser(uint8_t note_index){
+
+}
+
 int render_compressor(int signal){
 
   // keep this here!
@@ -499,11 +520,19 @@ int render_compressor(int signal){
   if (sig_db <= LOWER){
     return 0;
   } else if (sig_db <= UPPER){
+    // original
     // float soft_slope = SLOPE * ((sig_db - LOWER) / WIDTH) * 0.5;
-    return (int) ((1.0/6.0) * (sig_db-LOWER)) * (LOWER - sig_db);
+
+    // return (int) ((1.0/6.0) * (sig_db-LOWER)) * (LOWER - sig_db);
+    return (int) (sig_db + 23.0)/17.0;
   } else {
     return (int) SLOPE * (THRESHOLD - sig_db);
   }
+}
+
+int render_reverb(int signal){
+  // return signal + reverb.next(signal);
+  return signal;
 }
 
 int render_effects(int signal) {
@@ -524,12 +553,11 @@ int render_effects(int signal) {
   if(compressor_enabled()){
     signal = signal + render_compressor(signal);
   }
-
-  // if(vibrato_enabled()){
-  //   // do phaser
-  //   float 
-  //   signal = aVibrato.phMod();
+  
+  // if(reverb_enabled()){
+  //   signal = signal + render_reverb(signal);
   // }
+
   return (int) signal;
 }
 
@@ -548,7 +576,7 @@ void setup(){
   // aPhasor1.setFreq(phase_freq);
   
   // byte vib_intensity = 255;
-  // aVibrato.setFreq(15.f);
+  aVibrato.setFreq(3.f);
 
   
   // -128 to 127
@@ -711,8 +739,17 @@ int updateAudio(){
   for(int i=0; i<4; i++){
     notes[i]->update_envelope();
 
+    int next_sample;
+    if(true || vibrato_enabled()){
+      // intensity value * phase offset value
+      Q15n16 vibrato = (Q15n16) 160 * aVibrato.next();
+      next_sample = notes[i]->osc_phmod_next(vibrato);
+    } else {
+      next_sample = notes[i]->osc_next();
+    }
+
     // gain * filter(oscnext)
-    sig += ( notes[i]->env_next() * lpf.next(notes[i]->osc_next()) );
+    sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
   }
 
   // if(true || effects_active){
