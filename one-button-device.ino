@@ -8,6 +8,15 @@ controls
 
     weird ->
       raw freqency
+      
+      enc drives current freq value
+      button makes pulses
+      remember last few seconds of pulse?
+
+      hit button
+        begin playing at current frequency
+        begin recording into buffer
+
 
   -toggle switches
 
@@ -58,9 +67,20 @@ bool effects_active = false;
 LowPassFilter lpf;
 
 
-// is 'cells', some bs-ass measure from mozzi
+// is 'cells'
 uint8_t flange_samps = 512;
 AudioDelay <256> aDel;
+
+// 4 seconds?
+#define BUFFER_LENGTH 128
+bool play_weird = false;
+bool buffer_empty = true;
+bool waiting_to_play_buffer = false;
+
+char buffer[BUFFER_LENGTH];
+uint8_t buffcount = 0;
+uint8_t buffstepcount = 0;
+EventDelay buffdelay = EventDelay(2000);
 
 // Phasor <AUDIO_RATE> aPhasor1;
 // ReverbTank reverb;
@@ -135,17 +155,6 @@ Note::Note(int init_osc_index, int init_freq){
 
 // only in updastecontrol! 
 void Note::set_playing(bool timer_was_up){
-  // if(osc_index == 0){
-  //   playing = envelope0.playing();
-  // } else if(osc_index == 1){
-  //   playing = envelope1.playing();
-  // } else if(osc_index == 2){
-  //   playing = envelope2.playing();
-  // } else if(osc_index == 3){
-  //   playing = envelope3.playing();
-  // } else {
-  //   playing = false;
-  // }
   playing = timer_was_up;
 }
 
@@ -281,7 +290,6 @@ unsigned int Note::env_next(){
   }
 }
 
-// this is for timing out arp notes
 Note *notes[4];
 EventDelay *note_delays[4];
 
@@ -291,9 +299,10 @@ Note note2 = Note(2, 0);
 Note note3 = Note(3, 0);
 
 uint8_t arp_note_index = 0;
+// this is for timing out arp notes
 EventDelay arp_delay = EventDelay(300);
 
-long rando;
+// long rando;
 
 // button stuff
 bool button_state = false;
@@ -390,6 +399,11 @@ void play_arp_notes(){
   }
 }
 
+void set_rotary_freq(){
+  float weird_freq = 440.0 + (rotary_position * 10);
+  aSin0.setFreq(weird_freq);
+}
+
 void get_note_button(){
   // read the state of the switch into a local variable:
   bool reading = digitalRead(2);
@@ -414,7 +428,7 @@ void get_note_button(){
       button_state = reading;
 
       // only toggle the LED if the new button state is HIGH (uh)
-      if (button_state && current_note<0) {
+      if(button_state && current_note<0) {
 
         // HERE MEANS I"M GOING TO start PLAYing SOMTHING
         if(mode == REGNOTEMODE){
@@ -431,6 +445,7 @@ void get_note_button(){
           play_arp = true;
         } else if(mode == WEIRDMODE){
           // do some ol other shit
+          start_play_weird();
         }
         
       } else if(!button_state) {
@@ -439,12 +454,31 @@ void get_note_button(){
         // regular note held is set in play_note
         current_note = -1;
         play_arp = false;
+
+        // stop playing weird
+        if(mode == WEIRDMODE){
+          // do some ol other shit
+          stop_play_weird();
+        }
+        // start waiting to playback buffer
+        buffdelay.start(2000);
       }
     }
   }
 
   // save the reading. Next time through the loop, it'll be the lastButtonState:
   last_button_state = reading;
+}
+
+void start_play_weird(){
+  envelope0.noteOn(true);
+  play_weird = true;
+
+}
+
+void stop_play_weird(){
+  envelope0.noteOff();
+  play_weird = false;
 }
 
 // effects helpers
@@ -494,10 +528,6 @@ void set_effects() {
 #define RATIO 3.0
 #define SLOPE -2.0
 // #define SOFTSLOPEFACTOR -1.0/6.0;
-
-int render_phaser(uint8_t note_index){
-
-}
 
 int render_compressor(int signal){
 
@@ -572,6 +602,7 @@ void setup(){
   lpf.setResonance(200);
   lpf.setCutoffFreq(6000);
 
+
   // float phase_freq = 55.f;
   // aPhasor1.setFreq(phase_freq);
   
@@ -586,7 +617,7 @@ void setup(){
   // return asig/8 + aDel.next(asig, deltime); // mix some straight signal with the delayed signal
 
   // seed dat
-  randomSeed(analogRead(0));
+  // randomSeed(analogRead(0));
 
   Serial.begin(9600);
   startMozzi(CONTROL_RATE); // :)
@@ -642,6 +673,31 @@ void setup(){
   // milliseconds
   envelope3.setTimes(a_t,d_t,s_t,r_t);
   envelope3.update();
+
+  setup_mode(REGNOTEMODE);
+}
+
+void setup_mode(uint8_t newmode){
+  if(newmode != mode){
+    mode = newmode;
+    if(mode == REGNOTEMODE){
+      envelope0.update();
+      envelope1.update();
+      envelope2.update();
+      envelope3.update();
+    } else if(mode == ARPMODE){
+
+    } else if(mode == WEIRDMODE){
+      set_rotary_freq();
+
+      // init buffer
+      for(uint8_t i=0; i<BUFFER_LENGTH; i++){
+        buffer[i] = 0;
+      }
+      buffer_empty = true;
+
+    }
+  }
 }
 
 void updateControl() {
@@ -678,6 +734,12 @@ void updateControl() {
     // }
     // Serial.print("Encoder Position: ");
     // Serial.println(rotary_position);
+
+
+    // only set when changing freq
+    if(mode == WEIRDMODE){
+      set_rotary_freq();
+    }
   }
   last_a = aVal;
 
@@ -722,42 +784,105 @@ void updateControl() {
       }
 
     } else if(mode == WEIRDMODE){
-
+      // set above
     } else if(mode == SWEEPMODE){
       
     }
   }
 }
 
+int county = 0;
+
 int updateAudio(){
   int sig = 0;
+  // -if button down, play and fill buffer
+  // -if button was down, now up, start wait
+  // -if wait complete, play buffer
 
-  // count up how man oscs are playing
-  int active_sigs = 0;
 
   // get vals from all playing notes
-  for(int i=0; i<4; i++){
-    notes[i]->update_envelope();
+  if(mode == WEIRDMODE){
+    
+    if(play_weird){
+      // play while I'm holdin that button
+      sig = aSin0.next();
 
-    int next_sample;
-    if(true || vibrato_enabled()){
-      // intensity value * phase offset value
-      Q15n16 vibrato = (Q15n16) 160 * aVibrato.next();
-      next_sample = notes[i]->osc_phmod_next(vibrato);
-    } else {
-      next_sample = notes[i]->osc_next();
+
+      // fill buffer
+      // take a sample every 128 steps... eww!
+      if(buffstepcount == 63){
+
+        Serial.print("SetBUFFERE ");
+        Serial.println((int)buffer[buffcount]);
+        buffcount++;
+        buffstepcount = 0;
+
+        // there is officially *something* in the buffer
+        buffer_empty = false;
+      }
+
+      buffer[buffcount] = sig/2.0;
+      buffstepcount++;
+
+      // restart filling buffer if still holding button
+      if(buffcount == BUFFER_LENGTH){
+        buffcount = 0;
+        buffstepcount = 0;
+      }
     }
 
-    // gain * filter(oscnext)
-    sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
-  }
+    if(!play_weird && !buffer_empty && buffdelay.ready()) {
 
-  // if(true || effects_active){
+      Serial.print("I went to play my buffertown at buffcount ");
+      Serial.println(buffcount);
+      if(buffcount < BUFFER_LENGTH){
+        // play back from buffer
+        Serial.print("PLAYINGBCKS ");
+        Serial.println(buffer[buffcount]);
+        sig = (int) buffer[buffcount] * 2.0;
+
+
+        // buffer[buffcount] = 0;
+        buffcount++;
+
+        Serial.print("Played from buffer ");
+        Serial.println(sig);
+      } else {
+        Serial.println("Finished Playing Buffer");
+        // stop all that downloadin
+        // we are actually done with the buffer
+        buffcount = 0;
+        buffstepcount = 0;
+        buffer_empty = true;
+      }
+    }
+    
+    sig = envelope0.next() * sig;
+  } else {
+    // REGNOTEMODE, ARPMODE
+
+    for(int i=0; i<4; i++){
+      notes[i]->update_envelope();
+
+      int next_sample;
+      if(vibrato_enabled()){
+        // intensity value * phase offset value
+        Q15n16 vibrato = (Q15n16) 160 * aVibrato.next();
+        next_sample = notes[i]->osc_phmod_next(vibrato);
+      } else {
+        next_sample = notes[i]->osc_next();
+      }
+
+      // gain * filter(oscnext)
+      sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
+    }
+
+  }
 
   // dry will just be passed along if not enabled
   sig = render_effects(sig);
-  // }
 
+  
   return (int) sig>>8;
 }
 
