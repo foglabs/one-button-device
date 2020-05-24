@@ -352,6 +352,8 @@ int rotary_position = 12;
 int last_a;
 bool clockwise = false;
 
+long sweep_timer = mozziMicros();
+
 void play_note(int new_note, unsigned int delay_time){
   int available_slot = 0;
   for(int i=0; i<4; i++){
@@ -442,9 +444,14 @@ void play_arp_notes(){
   }
 }
 
-void set_rotary_freq(){
+void set_weird_freq(){
   float weird_freq = 440.0 + (rotary_position * 10);
   aSin0.setFreq(weird_freq);
+}
+
+void set_sweep_freq(){
+  float sweep_freq = 440.0 + (rotary_position * 10);
+  aSin0.setFreq(sweep_freq);
 }
 
 void get_rotary_button(){
@@ -531,6 +538,8 @@ void get_note_button(){
 
           // in this case, were thinking of input as a note were modifying
           play_schema_chord(60+rotary_position);
+        } else if(mode == SWEEPMODE){
+          start_play_sweep();
         }
         
       } else if(!button_state) {
@@ -552,6 +561,9 @@ void get_note_button(){
             // start noteoffs because button was released
             notes[i]->note_off();
           }
+        } else if(mode == SWEEPMODE){
+
+          stop_play_sweep();
         }
 
       }
@@ -698,6 +710,13 @@ void stop_play_weird(){
   play_weird = false;
 }
 
+void start_play_sweep(){
+  envelope0.noteOn(true);
+}
+
+void stop_play_sweep(){
+  envelope0.noteOff();
+}
 // effects helpers
 bool flanger_enabled(){
   // YOOO
@@ -943,13 +962,16 @@ void setup_mode(uint8_t newmode){
     } else if(mode == ARPMODE){
 
     } else if(mode == WEIRDMODE){
-      set_rotary_freq();
+      set_weird_freq();
 
       // init buffer
       for(uint8_t i=0; i<BUFFER_LENGTH; i++){
         buffer[i] = 0;
       }
       buffer_empty = true;
+    } else if(mode == SWEEPMODE){
+
+      set_sweep_freq();
     }
   }
 }
@@ -980,7 +1002,7 @@ void updateControl() {
 
     // only set when changing freq
     if(mode == WEIRDMODE){
-      set_rotary_freq();
+      set_weird_freq();
     }
   }
   last_a = aVal;
@@ -1032,7 +1054,11 @@ void updateControl() {
     } else if(mode == WEIRDMODE){
       // set above
     } else if(mode == SWEEPMODE){
-      
+      // wait 2ms to change sweep freq
+      if((mozziMicros() - sweep_timer) > 200){
+        set_sweep_freq();
+        sweep_timer = mozziMicros();
+      }
     }
   }
 }
@@ -1133,6 +1159,11 @@ int updateAudio(){
     }
     
     sig = envelope0.next() * sig;
+  } else if(mode == SWEEPMODE){
+    sig = aSin0.next();
+    sig = envelope0.next() * sig;
+    Serial.print("Swepe sig is now ");
+    Serial.println(sig);
   } else {
     // REGNOTEMODE, ARPMODE
 
