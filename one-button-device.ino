@@ -64,15 +64,24 @@ ADSR <AUDIO_RATE, AUDIO_RATE> envelope3;
 bool toggles[4] = {false,false,false,false};
 // toggle this based on inputs
 bool effects_active = false;
+
+// to know if we should reset enveleopes
+bool last_env_toggle = false;
+
 LowPassFilter lpf;
 
 
-// is 'cells'
+// // is 'cells'
 uint8_t flange_samps = 512;
 AudioDelay <256> aDel;
 
+
+
+// Weirdmode stuff
 // 4 seconds?
 #define BUFFER_LENGTH 128
+#define BUFFSTEP_LENGTH 128
+
 bool play_weird = false;
 bool buffer_empty = true;
 bool waiting_to_play_buffer = false;
@@ -81,20 +90,35 @@ char buffer[BUFFER_LENGTH];
 uint8_t buffcount = 0;
 uint8_t buffstepcount = 0;
 EventDelay buffdelay = EventDelay(2000);
+uint8_t bufferreplay = 0;
+float slope = 0;
 
-// Phasor <AUDIO_RATE> aPhasor1;
-// ReverbTank reverb;
+// chordschemamode stuff
+#define MAJOR 0
+#define MINOR 1
+#define MAJORSEVENTH 2
+#define MINORSEVENTH 3
+#define MINORTHIRDS 4
+#define MAJORTHIRDS 5
+#define STEPFIFTH 6
 
+
+// flag for if we're actually playing notes in arpmode
 bool play_arp = false;
 
 int current_note = -1;
-// bool button_state = digitalRead(2);
+
+uint8_t chord_schema = 0;
 int input_freq = 440;
 
 #define REGNOTEMODE 0
 #define ARPMODE 1
 #define WEIRDMODE 2
-#define SWEEPMODE 3
+#define CHORDMODE 3
+#define SWEEPMODE 4
+#define REPEATMODE 5
+#define CHORDSCHEMAMODE 6
+
 uint8_t mode = REGNOTEMODE;
 
 #define TOGGLE_0_PIN 3
@@ -104,6 +128,8 @@ uint8_t mode = REGNOTEMODE;
 
 #define ROTARY_A_PIN 11
 #define ROTARY_B_PIN 12
+#define ROTARY_BUTTON_PIN 8
+
 
 // this class wraps oscillators, when they're intended to be used for notes
 // need to make sure resetting them works, causes weird mode will probably bypass this
@@ -122,7 +148,6 @@ class Note {
     void note_off(bool);
 
     bool is_playing();
-    void set_playing(bool);
     bool is_available();
     void set_available(bool);
 
@@ -151,11 +176,6 @@ Note::Note(int init_osc_index, int init_freq){
       aSin3.setFreq(init_freq);
     }
   }
-}
-
-// only in updastecontrol! 
-void Note::set_playing(bool timer_was_up){
-  playing = timer_was_up;
 }
 
 bool Note::is_playing(){
@@ -302,6 +322,12 @@ uint8_t arp_note_index = 0;
 // this is for timing out arp notes
 EventDelay arp_delay = EventDelay(300);
 
+// for each chord
+// EventDelay chord_delay = EventDelay(1300);
+
+
+
+
 // long rando;
 
 // button stuff
@@ -311,18 +337,29 @@ long last_debounce_time = mozziMicros();
 // 10ms
 uint8_t debounce_delay = 10000;
 
+// rotary button
+bool rbstate = false;
+bool last_rbstate = false;
+long last_rbdebounce_time = mozziMicros();
+// 10ms
+uint8_t rbdebounce_delay = 10000;
+// time to hold down, 1200ms
+uint8_t rb_delay = 300000;
+long rb_timer = mozziMicros();
+
 // rotary
 int rotary_position = 12;
 int last_a;
 bool clockwise = false;
 
-
 void play_note(int new_note, unsigned int delay_time){
   int available_slot = 0;
   for(int i=0; i<4; i++){
-    Serial.println("is_palying was");
-    Serial.println(notes[i]->is_playing());
+    // Serial.println("is_palying was");
+    // Serial.println(notes[i]->is_playing());
     if(notes[i]->is_available() == true){
+      Serial.print(i);
+      Serial.println(" was available to play...");
       available_slot = i;
       break;
     }
@@ -330,17 +367,23 @@ void play_note(int new_note, unsigned int delay_time){
   Serial.println("NOTE IS");
   Serial.println(new_note);
   float freq = note_to_freq(new_note);
-  Serial.println("FREQ IS");
-  Serial.println(freq);
+  // Serial.println("FREQ IS");
+  // Serial.println(freq);
   notes[available_slot]->set_frequency(freq);
 
   // Serial.println("Maybe it fucking worked");
   // Serial.println(notes[available_slot]->get_frequency());
-  current_note = available_slot;
+  
+  if(mode == REGNOTEMODE){
+    // this is the which notes[i] slot were playing from in regular mode
+    current_note = available_slot;  
+  }
+  
     
   Serial.println("Running ::note_on for ");
   Serial.println(available_slot);
   notes[available_slot]->note_on();
+  notes[available_slot]->set_available(false);
 
   if(delay_time > 0){
     // for arp, set a timer to know when to note off
@@ -404,6 +447,35 @@ void set_rotary_freq(){
   aSin0.setFreq(weird_freq);
 }
 
+void get_rotary_button(){
+
+  // goes low when pressed
+  bool readin = !digitalRead(ROTARY_BUTTON_PIN);
+
+  if(readin != last_rbstate){
+    last_rbdebounce_time = mozziMicros();
+  }
+
+  long now = mozziMicros();
+  if((now - last_rbdebounce_time) > rbdebounce_delay){
+    if(readin != button_state){
+      rbstate = readin;
+
+      // this is wher da magik happens
+
+
+      if(rbstate && (now - rb_timer) > rb_delay){
+        Serial.println("I incremented chordschema");
+        chord_schema++;
+        rb_timer = now;
+        if(chord_schema > 6){
+          chord_schema = 0;
+        }
+      }
+    }
+  }
+}
+
 void get_note_button(){
   // read the state of the switch into a local variable:
   bool reading = digitalRead(2);
@@ -427,7 +499,7 @@ void get_note_button(){
     if (reading != button_state) {
       button_state = reading;
 
-      // only toggle the LED if the new button state is HIGH (uh)
+      // only do osmething if the new button state is HIGH (uh)
       if(button_state && current_note<0) {
 
         // HERE MEANS I"M GOING TO start PLAYing SOMTHING
@@ -437,8 +509,8 @@ void get_note_button(){
           // next note is C3 offset by current rotary value!
           // Serial.print("Trying to play");
           // Serial.println(48 + rotary_position);
-          Serial.print("rotary_position");
-          Serial.println(rotary_position);
+          // Serial.print("rotary_position");
+          // Serial.println(rotary_position);
           // play_note(48 + rotary_position, 0);
           play_note(72 + rotary_position, 0);
         } else if(mode == ARPMODE){
@@ -446,12 +518,26 @@ void get_note_button(){
         } else if(mode == WEIRDMODE){
           // do some ol other shit
           start_play_weird();
+        } else if(mode == CHORDMODE){
+
+          // play a chord
+          Serial.print("love to play chord ");
+          Serial.println(rotary_position);
+          play_seq_chord(rotary_position);
+        } else if(mode == CHORDSCHEMAMODE){
+
+          Serial.print("love to play schema chord ");
+          Serial.println(rotary_position);
+
+          // in this case, were thinking of input as a note were modifying
+          play_schema_chord(60+rotary_position);
         }
         
       } else if(!button_state) {
         // Serial.println("No more note held");
         // no more note held
         // regular note held is set in play_note
+        // chord root held is set in play_seq_chord
         current_note = -1;
         play_arp = false;
 
@@ -459,9 +545,15 @@ void get_note_button(){
         if(mode == WEIRDMODE){
           // do some ol other shit
           stop_play_weird();
+          // start waiting to playback buffer
+          buffdelay.start(600);
+        } else if(mode == CHORDMODE || mode == CHORDSCHEMAMODE){
+          for(uint8_t i=0; i<4; i++){
+            // start noteoffs because button was released
+            notes[i]->note_off();
+          }
         }
-        // start waiting to playback buffer
-        buffdelay.start(2000);
+
       }
     }
   }
@@ -470,10 +562,135 @@ void get_note_button(){
   last_button_state = reading;
 }
 
+// chord based on starting note and selected chord shape
+void play_schema_chord(uint8_t starting_note){
+    for(uint8_t i=0; i<4; i++) {
+    notes[i]->note_off();
+    notes[i]->set_available(true);
+  }
+  uint8_t note1 = 0;
+  uint8_t note2 = 0;
+  uint8_t note3 = 0;
+  uint8_t note4 = 0;
+
+  Serial.print("Chord schema is ");
+  Serial.println(chord_schema); 
+
+  if(chord_schema == MAJOR){
+    note1 = starting_note;
+    note2 = starting_note+4;
+    note3 = starting_note+7;
+  } else if(chord_schema == MINOR){
+    note1 = starting_note;
+    note2 = starting_note+3;
+    note3 = starting_note+7;
+  } else if(chord_schema == MAJORSEVENTH){
+    note1 = starting_note;
+    note2 = starting_note+3;
+    note3 = starting_note+7;
+    note4 = starting_note+11;
+  } else if(chord_schema == MINORSEVENTH){
+    note1 = starting_note;
+    note2 = starting_note+3;
+    note3 = starting_note+7;
+    note4 = starting_note+10;
+  } else if(chord_schema == MINORTHIRDS){
+    note1 = starting_note;
+    note2 = starting_note+3;
+    note3 = starting_note+3;
+  } else if(chord_schema == MAJORTHIRDS){
+    note1 = starting_note;
+    note2 = starting_note+4;
+    note3 = starting_note+8;
+  } else if(chord_schema == STEPFIFTH){
+    note1 = starting_note;
+    note2 = starting_note+2;
+    note3 = starting_note+7;
+  }
+
+  play_note(note1, 1000);
+
+  if(note2 > 0){
+    play_note(note2, 1000);
+  }
+
+  if(note3 > 0){
+    play_note(note3, 1000);
+  }
+
+  if(note4 > 0){
+    play_note(note4, 1000);
+  }
+}
+
+// chords in a seequence bsed on offset
+void play_seq_chord(int note_offset){
+  // open up all of the notes so we dont get a straggling one from prev chord that fucks up the signal
+  for(uint8_t i=0; i<4; i++) {
+    notes[i]->note_off();
+    notes[i]->set_available(true);
+  }
+  uint8_t note1;
+  uint8_t note2;
+  uint8_t note3;
+
+  switch (abs(note_offset % 9)) {
+    case 0: note1 = 72;
+            note2 = 76;
+            note3 = 79;
+        break;
+    case 1: note1 = 74;
+            note2 = 78;
+            note3 = 81;
+        break;
+    case 2: note1 = 76;
+            note2 = 79;
+            note3 = 83;
+        break;
+    case 3: note1 = 77;
+            note2 = 81;
+            note3 = 84;
+        break;
+    case 4: note1 = 78;
+            note2 = 82;
+            note3 = 85;
+        break;
+    case 5: note1 = 79;
+            note2 = 83;
+            note3 = 86;
+        break;
+    case 6: note1 = 81;
+            note2 = 83;
+            note3 = 88;
+        break;
+    case 7: note1 = 81;
+            note2 = 84;
+            note3 = 88;
+    case 8: note1 = 81;
+            note2 = 85;
+            note3 = 88;            
+        break;
+        default: return;
+  }
+
+  // track this so we know what the root note is
+  current_note = note_offset;
+
+  // /72 is our base note C3
+  //  how many of our 9-step 'octaves' did we get, add a real octave for each additional one
+  int octave_offset = ( note_offset/9 ) * 12;
+
+  Serial.print("Octave Offset... ");
+  Serial.println(octave_offset);
+
+  play_note(note1 + octave_offset, 800);
+  play_note(note2 + octave_offset, 800);
+  play_note(note3 + octave_offset, 800);
+}
+
 void start_play_weird(){
   envelope0.noteOn(true);
   play_weird = true;
-
 }
 
 void stop_play_weird(){
@@ -483,11 +700,19 @@ void stop_play_weird(){
 
 // effects helpers
 bool flanger_enabled(){
+  // YOOO
+  return false;
   return toggles[0];
 }
 
 bool compressor_enabled(){
   return toggles[1];
+}
+
+bool short_env_enabled(){
+  // YOOO
+  return toggles[0];
+  return toggles[2];
 }
 
 // too big for memory :/
@@ -507,19 +732,16 @@ bool vibrato_enabled(){
 void set_effects() {
   for(uint8_t i=0; i<4; i++){
     // bool newtoggle = digitalRead(i);
-
     // if(newtoggle != toggles[i]){
     //   Serial.print(i);
     //   Serial.print(" Changed to ");
     //   Serial.println(newtoggle);
     // }
-
-    toggles[i] = digitalRead(i+3);
-    // toggles[i] = true;
+    
+    // comes in backwards... (and noexistent ones are true)
+    toggles[i] = !digitalRead(i+3);;
   }
 }
-
-
 
 #define THRESHOLD -20.0
 #define WIDTH 6.0
@@ -591,13 +813,19 @@ int render_effects(int signal) {
   return (int) signal;
 }
 
+float get_slope(float y2, float x2, int y1, int x1){
+  return (y2-y1/x2-x1);
+}
+
 void setup(){
   pinMode(TOGGLE_0_PIN, INPUT_PULLUP);
   pinMode(TOGGLE_1_PIN, INPUT_PULLUP);
   pinMode(TOGGLE_2_PIN, INPUT_PULLUP);
   pinMode(TOGGLE_3_PIN, INPUT_PULLUP);
 
-  arp_delay.start(1000);
+  pinMode(ROTARY_BUTTON_PIN, INPUT_PULLUP);
+
+  arp_delay.start(300);
 
   lpf.setResonance(200);
   lpf.setCutoffFreq(6000);
@@ -641,15 +869,44 @@ void setup(){
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
 
-  unsigned int a_t = 120;
-  byte a_level = 255;
-  unsigned int d_t = 300;
-  byte d_level = 255;
-  unsigned int s_t = 4000;
+  setup_envelopes(false);
+
+  setup_mode(CHORDSCHEMAMODE);
+}
+
+void setup_envelopes(bool short_env){
+
+  unsigned int a_t = 0;
+  unsigned int d_t = 0;
+  unsigned int s_t = 0;
+  unsigned int r_t = 0;
+  byte a_level = 0;
+  byte d_level = 0;
   byte s_level = 0;
-  unsigned int r_t = 800;
   byte r_level = 0;
 
+  if(short_env){
+  
+    a_t = 10;
+    a_level = 255;
+    d_t = 10;
+    d_level = 255;
+    s_t = 10000;
+    s_level = 0;
+    r_t = 100;
+    r_level = 0;
+  } else {
+
+    a_t = 120;
+    a_level = 255;
+    d_t = 300;
+    d_level = 255;
+    s_t = 4000;
+    s_level = 0;
+    r_t = 1600;
+    r_level = 0;
+  }
+  
   // aSin0.setFreq(freq);
   envelope0.setADLevels(a_level,d_level);
   // milliseconds
@@ -673,14 +930,12 @@ void setup(){
   // milliseconds
   envelope3.setTimes(a_t,d_t,s_t,r_t);
   envelope3.update();
-
-  setup_mode(REGNOTEMODE);
 }
 
 void setup_mode(uint8_t newmode){
   if(newmode != mode){
     mode = newmode;
-    if(mode == REGNOTEMODE){
+    if(mode == REGNOTEMODE || mode == CHORDMODE || mode == CHORDSCHEMAMODE){
       envelope0.update();
       envelope1.update();
       envelope2.update();
@@ -695,17 +950,11 @@ void setup_mode(uint8_t newmode){
         buffer[i] = 0;
       }
       buffer_empty = true;
-
     }
   }
 }
 
 void updateControl() {
-  // increment that bad boy
-
-  // rotary_position++;
-  // Serial.println(rotary_position);
-  // get_rotary();
 
   // why the fuck does this only work out here?! inside void get_rotary() function, ++ behaves differently
   bool aVal = digitalRead(ROTARY_A_PIN);
@@ -715,26 +964,19 @@ void updateControl() {
       // Means pin A Changed first -We're RotatingClockwise.
       rotary_position++;
       // clockwise = true;
-      Serial.println("Rotary ++");
-      Serial.print("Rotary is now");
-  Serial.println(rotary_position);  
+      // Serial.println("Rotary ++");
+      // Serial.print("Rotary is now");
+  // Serial.println(rotary_position);  
     } else {
       // Otherwise B changedfirst and we're moving CCW
       // clockwise = false;
       rotary_position--;
-      Serial.println("Rotary --");
-        Serial.print("Rotary is now");
-        Serial.println(rotary_position);
+      // Serial.println("Rotary --");
+        // Serial.print("Rotary is now");
+        // Serial.println(rotary_position);
     }
-    // Serial.print ("Rotated: ");
-    // if(clockwise){
-    //   Serial.println ("clockwise");
-    // } else {
-    //   Serial.println("counterclockwise");
-    // }
-    // Serial.print("Encoder Position: ");
-    // Serial.println(rotary_position);
-
+    Serial.print("Rotary postition is ");
+    Serial.println(rotary_position);
 
     // only set when changing freq
     if(mode == WEIRDMODE){
@@ -743,18 +985,20 @@ void updateControl() {
   }
   last_a = aVal;
 
-
-
-
-
+  get_rotary_button();
   // check if note buttons down/ready for action -> if so, play note!
   get_note_button();
   // just set em into toggles[]
   set_effects();
 
+  bool this_env_toggle = short_env_enabled();
+  if(last_env_toggle != this_env_toggle){
+    setup_envelopes(short_env_enabled());
+  }
+  last_env_toggle = this_env_toggle;
 
   if(play_arp){
-    Serial.println("Im Playin arp");
+    // Serial.println("Im Playin arp");
     play_arp_notes();
   }
 
@@ -770,11 +1014,13 @@ void updateControl() {
         // do regular note off if button not held for this note
         notes[i]->note_off();
         note_delays[i]->start(800);
-        notes[i]->set_available(false);
+        // notes[i]->set_available(false);
       } else if(note_delays[i]->ready()){
 
         notes[i]->set_available(true);
       }
+
+    } else if(mode == CHORDMODE){
 
     } else if(mode == ARPMODE) {
       
@@ -810,20 +1056,24 @@ int updateAudio(){
 
       // fill buffer
       // take a sample every 128 steps... eww!
-      if(buffstepcount == 63){
+      if(buffstepcount == 0){
 
-        Serial.print("SetBUFFERE ");
-        Serial.println((int)buffer[buffcount]);
+        // Serial.print("SetBUFFERE ");
+        // Serial.println((int)buffer[buffcount]);
         buffcount++;
-        buffstepcount = 0;
 
         // there is officially *something* in the buffer
         buffer_empty = false;
+
+        // only TAKE a sample once every 63 or whatever
+        buffer[buffcount] = (char) sig/2.0;
       }
 
-      buffer[buffcount] = sig/2.0;
       buffstepcount++;
-
+      if(buffstepcount == BUFFSTEP_LENGTH){
+        buffstepcount = 0;
+      }
+  
       // restart filling buffer if still holding button
       if(buffcount == BUFFER_LENGTH){
         buffcount = 0;
@@ -831,29 +1081,54 @@ int updateAudio(){
       }
     }
 
+    // i am not holding the button, there is buffer, and we waited for buffdelay
     if(!play_weird && !buffer_empty && buffdelay.ready()) {
 
-      Serial.print("I went to play my buffertown at buffcount ");
-      Serial.println(buffcount);
+      // Serial.print("I went to play my buffertown at buffcount ");
+      // Serial.println(buffcount);
       if(buffcount < BUFFER_LENGTH){
         // play back from buffer
-        Serial.print("PLAYINGBCKS ");
-        Serial.println(buffer[buffcount]);
-        sig = (int) buffer[buffcount] * 2.0;
+        // Serial.print("PLAYINGBCKS ");
+        // Serial.println(buffer[buffcount]);
 
+        int this_sig = (int) buffer[buffcount] * 2.0;
+        // y = mx + b
+        // sig = (int) (slope * buffstepcount + this_sig);
+        // attenuate siga little
+        sig = (int) (slope * buffstepcount + this_sig) * 0.36;
 
-        // buffer[buffcount] = 0;
-        buffcount++;
+        // only switch to the next sample once we've arrived there
+        if(buffstepcount == 0){
+          buffcount++;
 
-        Serial.print("Played from buffer ");
-        Serial.println(sig);
+          // y2 is next amp, y1 is this amp
+          // xs are where we are within this bufferstep
+          int next_sig = (int) buffer[buffcount + 1] * 2.0;
+
+          // set next slope
+          slope = get_slope(next_sig, this_sig, 63, 0);
+        }
+
+        buffstepcount++;
+        if(buffstepcount == BUFFSTEP_LENGTH){
+          buffstepcount = 0;
+        }
+
+        // Serial.print("Played from buffer ");
+        // Serial.println(sig);
       } else {
-        Serial.println("Finished Playing Buffer");
+        // Serial.println("Finished Playing Buffer");
         // stop all that downloadin
         // we are actually done with the buffer
         buffcount = 0;
         buffstepcount = 0;
-        buffer_empty = true;
+
+        bufferreplay++;
+        if(bufferreplay == 2){
+          // stop repeating buffer playback after 5
+          bufferreplay = 0;
+          buffer_empty = true;
+        }
       }
     }
     
@@ -867,6 +1142,7 @@ int updateAudio(){
       int next_sample;
       if(vibrato_enabled()){
         // intensity value * phase offset value
+        // Serial.println("Vibrato active...");
         Q15n16 vibrato = (Q15n16) 160 * aVibrato.next();
         next_sample = notes[i]->osc_phmod_next(vibrato);
       } else {
@@ -874,9 +1150,18 @@ int updateAudio(){
       }
 
       // gain * filter(oscnext)
-      sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
-    }
+      if(mode == REGNOTEMODE || mode == ARPMODE){
+        sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
+      } else if(mode == CHORDMODE){
 
+        // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
+        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i+1) * 0.89)  );
+      } else if(mode == CHORDSCHEMAMODE){
+
+        // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
+        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i^2) * 0.89)  );
+      }
+    }
   }
 
   // dry will just be passed along if not enabled
