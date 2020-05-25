@@ -82,7 +82,11 @@ AudioDelay <256> aDel;
 #define BUFFER_LENGTH 128
 #define BUFFSTEP_LENGTH 128
 
-bool play_weird = false;
+// flag for ARPMODE, WEIRDMODE, SWEEPMODE to keep playing outside of individual Note code
+// WEIRDMODE to say if were going into buffer machinery
+// SWEEPMODE signal or no
+// ARPMODE for if we're actually playing notes in arpmode
+bool play_continuing = false;
 bool buffer_empty = true;
 bool waiting_to_play_buffer = false;
 
@@ -101,10 +105,6 @@ float slope = 0;
 #define MINORTHIRDS 4
 #define MAJORTHIRDS 5
 #define STEPFIFTH 6
-
-
-// flag for if we're actually playing notes in arpmode
-bool play_arp = false;
 
 int current_note = -1;
 
@@ -521,7 +521,7 @@ void get_note_button(){
           // play_note(48 + rotary_position, 0);
           play_note(72 + rotary_position, 0);
         } else if(mode == ARPMODE){
-          play_arp = true;
+          play_continuing = true;
         } else if(mode == WEIRDMODE){
           // do some ol other shit
           start_play_weird();
@@ -548,7 +548,7 @@ void get_note_button(){
         // regular note held is set in play_note
         // chord root held is set in play_seq_chord
         current_note = -1;
-        play_arp = false;
+        play_continuing = false;
 
         // stop playing weird
         if(mode == WEIRDMODE){
@@ -702,20 +702,24 @@ void play_seq_chord(int note_offset){
 
 void start_play_weird(){
   envelope0.noteOn(true);
-  play_weird = true;
+  play_continuing = true;
 }
 
 void stop_play_weird(){
   envelope0.noteOff();
-  play_weird = false;
+  play_continuing = false;
 }
 
 void start_play_sweep(){
+  Serial.println("I start play Sweep"); 
   envelope0.noteOn(true);
+  play_continuing = true;
 }
 
 void stop_play_sweep(){
+  Serial.println("I Stop play Sweep"); 
   envelope0.noteOff();
+  play_continuing = false;
 }
 // effects helpers
 bool flanger_enabled(){
@@ -890,7 +894,7 @@ void setup(){
 
   setup_envelopes(false);
 
-  setup_mode(CHORDSCHEMAMODE);
+  setup_mode(SWEEPMODE);
 }
 
 void setup_envelopes(bool short_env){
@@ -953,8 +957,13 @@ void setup_envelopes(bool short_env){
 
 void setup_mode(uint8_t newmode){
   if(newmode != mode){
+    
     mode = newmode;
+    // turn this off so we dont carry over from other mode
+    play_continuing = false;
+
     if(mode == REGNOTEMODE || mode == CHORDMODE || mode == CHORDSCHEMAMODE){
+      
       envelope0.update();
       envelope1.update();
       envelope2.update();
@@ -971,6 +980,7 @@ void setup_mode(uint8_t newmode){
       buffer_empty = true;
     } else if(mode == SWEEPMODE){
 
+      envelope0.update();
       set_sweep_freq();
     }
   }
@@ -1019,7 +1029,7 @@ void updateControl() {
   }
   last_env_toggle = this_env_toggle;
 
-  if(play_arp){
+  if(play_continuing){
     // Serial.println("Im Playin arp");
     play_arp_notes();
   }
@@ -1075,7 +1085,8 @@ int updateAudio(){
   // get vals from all playing notes
   if(mode == WEIRDMODE){
     
-    if(play_weird){
+    // keep on playin
+    if(play_continuing){
       // play while I'm holdin that button
       sig = aSin0.next();
 
@@ -1108,7 +1119,7 @@ int updateAudio(){
     }
 
     // i am not holding the button, there is buffer, and we waited for buffdelay
-    if(!play_weird && !buffer_empty && buffdelay.ready()) {
+    if(!play_continuing && !buffer_empty && buffdelay.ready()) {
 
       // Serial.print("I went to play my buffertown at buffcount ");
       // Serial.println(buffcount);
@@ -1160,10 +1171,13 @@ int updateAudio(){
     
     sig = envelope0.next() * sig;
   } else if(mode == SWEEPMODE){
-    sig = aSin0.next();
-    sig = envelope0.next() * sig;
-    Serial.print("Swepe sig is now ");
-    Serial.println(sig);
+
+    // if we're still holding the button
+    if(play_continuing){
+      sig = (int) envelope0.next() * aSin0.next();
+      Serial.println(sig);
+    }
+    // Serial.println(sig);
   } else {
     // REGNOTEMODE, ARPMODE
 
