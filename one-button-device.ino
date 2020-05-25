@@ -86,7 +86,12 @@ AudioDelay <256> aDel;
 // WEIRDMODE to say if were going into buffer machinery
 // SWEEPMODE signal or no
 // ARPMODE for if we're actually playing notes in arpmode
-bool play_continuing = false;
+// bool play_continuing = false;
+#define STOPPED 0
+#define PLAYING 1
+#define TAILING 2
+uint8_t play_continuing = STOPPED;
+
 bool buffer_empty = true;
 bool waiting_to_play_buffer = false;
 
@@ -450,11 +455,13 @@ void set_weird_freq(){
 }
 
 void set_sweep_freq(){
-  float sweep_freq = 440.0 + (rotary_position * 10);
+
+  // exponentially increase with rot pos
+  float sweep_freq = 523.25 + (pow(rotary_position, 2));
   aSin0.setFreq(sweep_freq);
 }
 
-void get_rotary_button(){
+void handle_rotary_button(){
 
   // goes low when pressed
   bool readin = !digitalRead(ROTARY_BUTTON_PIN);
@@ -472,18 +479,28 @@ void get_rotary_button(){
 
 
       if(rbstate && (now - rb_timer) > rb_delay){
-        Serial.println("I incremented chordschema");
-        chord_schema++;
+        // Serial.println("I incremented chordschema");
+        // chord_schema++;
+        // rb_timer = now;
+        // if(chord_schema > 6){
+        //   chord_schema = 0;
+        // }
+
+        mode++;
         rb_timer = now;
-        if(chord_schema > 6){
-          chord_schema = 0;
+        if(mode > 6){
+          mode = 0;
         }
+
+        setup_mode(mode);
+        Serial.print("I incremented MODE to ");
+        Serial.println(mode);
       }
     }
   }
 }
 
-void get_note_button(){
+void handle_note_button(){
   // read the state of the switch into a local variable:
   bool reading = digitalRead(2);
 
@@ -521,7 +538,7 @@ void get_note_button(){
           // play_note(48 + rotary_position, 0);
           play_note(72 + rotary_position, 0);
         } else if(mode == ARPMODE){
-          play_continuing = true;
+          play_continuing = PLAYING;
         } else if(mode == WEIRDMODE){
           // do some ol other shit
           start_play_weird();
@@ -548,7 +565,8 @@ void get_note_button(){
         // regular note held is set in play_note
         // chord root held is set in play_seq_chord
         current_note = -1;
-        play_continuing = false;
+
+        play_continuing = TAILING;
 
         // stop playing weird
         if(mode == WEIRDMODE){
@@ -702,24 +720,27 @@ void play_seq_chord(int note_offset){
 
 void start_play_weird(){
   envelope0.noteOn(true);
-  play_continuing = true;
+  play_continuing = PLAYING;
 }
 
 void stop_play_weird(){
   envelope0.noteOff();
-  play_continuing = false;
+  play_continuing = TAILING;
 }
 
 void start_play_sweep(){
   Serial.println("I start play Sweep"); 
   envelope0.noteOn(true);
-  play_continuing = true;
+  play_continuing = PLAYING;
 }
 
 void stop_play_sweep(){
-  Serial.println("I Stop play Sweep"); 
+  Serial.println("I Stop play Sweep");
   envelope0.noteOff();
-  play_continuing = false;
+  play_continuing = TAILING;
+  // set up env timer for the one Note we're using (0)
+  Serial.println(getReleaseTime( short_env_enabled() ));
+  note_delays[0]->start( 1000 );
 }
 // effects helpers
 bool flanger_enabled(){
@@ -908,28 +929,37 @@ void setup_envelopes(bool short_env){
   byte s_level = 0;
   byte r_level = 0;
 
-  if(short_env){
+  // if(short_env){
   
-    a_t = 10;
-    a_level = 255;
-    d_t = 10;
-    d_level = 255;
-    s_t = 10000;
-    s_level = 0;
-    r_t = 100;
-    r_level = 0;
-  } else {
+  //   a_t = 10;
+  //   a_level = 255;
+  //   d_t = 10;
+  //   d_level = 255;
+  //   s_t = 10000;
+  //   s_level = 0;
+  //   r_t = 100;
+  //   r_level = 0;
+  // } else {
 
-    a_t = 120;
-    a_level = 255;
-    d_t = 300;
-    d_level = 255;
-    s_t = 4000;
-    s_level = 0;
-    r_t = 1600;
-    r_level = 0;
-  }
+  //   a_t = 120;
+  //   a_level = 255;
+  //   d_t = 300;
+  //   d_level = 255;
+  //   s_t = 4000;
+  //   s_level = 0;
+  //   r_t = 1600;
+  //   r_level = 0;
+  // }
   
+  a_t = msToMozziTime( getAttackTime(short_env) );
+  a_level = getAttackLevel(short_env);
+  d_t =msToMozziTime(  getDecayTime(short_env) );
+  d_level = getDecayLevel(short_env);
+  s_t = msToMozziTime( getSustainTime(short_env) );
+  s_level = getSustainLevel(short_env);
+  r_t = msToMozziTime( getReleaseTime(short_env) );
+  r_level = getReleaseLevel(short_env);
+
   // aSin0.setFreq(freq);
   envelope0.setADLevels(a_level,d_level);
   // milliseconds
@@ -955,12 +985,82 @@ void setup_envelopes(bool short_env){
   envelope3.update();
 }
 
+uint16_t msToMozziTime(uint16_t ms){
+  return (uint16_t) ms / 4;
+}
+
+uint16_t getAttackTime(bool short_env){
+  if(short_env){
+    return 40;
+    
+  } else {
+    return 480;
+  }
+}
+uint16_t getAttackLevel(bool short_env){
+  if(short_env){
+    return 255;
+  } else {
+
+    return 255;
+  }
+
+}
+uint16_t getDecayTime(bool short_env){
+  if(short_env){
+    return 10;
+  } else {
+
+    return 300;
+  }
+
+}
+uint16_t getDecayLevel(bool short_env){
+  if(short_env){
+    return 255;
+  } else {
+    return 255;
+  }
+
+}
+uint16_t getSustainTime(bool short_env){
+  if(short_env){
+    return 200000;
+  } else {
+    return 400000;
+  }
+
+}
+uint16_t getSustainLevel(bool short_env){
+  if(short_env){
+    return 255;
+  } else {
+    return 255;
+  }
+
+}
+uint16_t getReleaseTime(bool short_env){
+  if(short_env){
+    return 100;
+  } else {
+    return 800;
+  }
+
+}
+uint16_t getReleaseLevel(bool short_env){
+  if(short_env){
+    return 0;
+  } else {
+    return 0;
+  }
+}
+
 void setup_mode(uint8_t newmode){
   if(newmode != mode){
     
     mode = newmode;
     // turn this off so we dont carry over from other mode
-    play_continuing = false;
+    play_continuing = STOPPED;
 
     if(mode == REGNOTEMODE || mode == CHORDMODE || mode == CHORDSCHEMAMODE){
       
@@ -1017,9 +1117,9 @@ void updateControl() {
   }
   last_a = aVal;
 
-  get_rotary_button();
+  handle_rotary_button();
   // check if note buttons down/ready for action -> if so, play note!
-  get_note_button();
+  handle_note_button();
   // just set em into toggles[]
   set_effects();
 
@@ -1029,20 +1129,18 @@ void updateControl() {
   }
   last_env_toggle = this_env_toggle;
 
-  if(play_continuing){
-    // Serial.println("Im Playin arp");
+  if(mode == ARPMODE && play_continuing){
+    // keep playin that arp
     play_arp_notes();
   }
 
   // handle events for oscillatorsz
   for(int i=0; i<4; i++){
-    // Serial.println(notes[i]->is_playing());
 
     if(mode == REGNOTEMODE){
       
       if(notes[i]->is_playing() && current_note != i){
-        // Serial.println("Note goin off now");
-        // Serial.println(i);
+
         // do regular note off if button not held for this note
         notes[i]->note_off();
         note_delays[i]->start(800);
@@ -1070,6 +1168,12 @@ void updateControl() {
         sweep_timer = mozziMicros();
       }
     }
+
+    // shut off after we waited for the release
+    if(play_continuing == TAILING && note_delays[0]->ready()){
+      Serial.println("I stoped play con");
+      play_continuing = STOPPED;
+    }
   }
 }
 
@@ -1081,12 +1185,11 @@ int updateAudio(){
   // -if button was down, now up, start wait
   // -if wait complete, play buffer
 
-
   // get vals from all playing notes
   if(mode == WEIRDMODE){
     
     // keep on playin
-    if(play_continuing){
+    if(play_continuing != STOPPED){
       // play while I'm holdin that button
       sig = aSin0.next();
 
@@ -1119,7 +1222,7 @@ int updateAudio(){
     }
 
     // i am not holding the button, there is buffer, and we waited for buffdelay
-    if(!play_continuing && !buffer_empty && buffdelay.ready()) {
+    if(play_continuing == STOPPED && !buffer_empty && buffdelay.ready()) {
 
       // Serial.print("I went to play my buffertown at buffcount ");
       // Serial.println(buffcount);
@@ -1172,12 +1275,11 @@ int updateAudio(){
     sig = envelope0.next() * sig;
   } else if(mode == SWEEPMODE){
 
-    // if we're still holding the button
-    if(play_continuing){
+    // if we're still holding the button, or TAILING
+    if(play_continuing != STOPPED){
       sig = (int) envelope0.next() * aSin0.next();
-      Serial.println(sig);
+      notes[0]->update_envelope();
     }
-    // Serial.println(sig);
   } else {
     // REGNOTEMODE, ARPMODE
 
