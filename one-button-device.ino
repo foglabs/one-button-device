@@ -349,7 +349,7 @@ long last_rbdebounce_time = mozziMicros();
 // 10ms
 uint8_t rbdebounce_delay = 10000;
 // time to hold down, 1200ms
-uint8_t rb_delay = 300000;
+uint8_t rb_delay = 800000;
 long rb_timer = mozziMicros();
 
 // rotary
@@ -437,6 +437,7 @@ int next_arp_note(){
 }
 
 void play_arp_notes(){
+  // ARPMODE
   if(arp_delay.ready()){
     int next_note = next_arp_note();
 
@@ -444,8 +445,16 @@ void play_arp_notes(){
     next_note += rotary_position;
 
     arp_note_index += 1;
-    play_note(next_note, 800);
-    arp_delay.start(300);
+    play_note(next_note, getReleaseTime(short_env_enabled()));
+    uint16_t arp_time;
+
+    if(short_env_enabled()){
+      arp_time = 300;
+    } else {
+      arp_time = 1200;
+    }
+    
+    arp_delay.start(arp_time);
   }
 }
 
@@ -472,7 +481,10 @@ void handle_rotary_button(){
 
   long now = mozziMicros();
   if((now - last_rbdebounce_time) > rbdebounce_delay){
-    if(readin != button_state){
+    if(readin != rbstate){
+
+      Serial.println("Got Redin");
+
       rbstate = readin;
 
       // this is wher da magik happens
@@ -498,6 +510,9 @@ void handle_rotary_button(){
       }
     }
   }
+
+  // save the reading. Next time through the loop, it'll be the lastButtonState:
+  last_rbstate = readin;
 }
 
 void handle_note_button(){
@@ -713,9 +728,9 @@ void play_seq_chord(int note_offset){
   Serial.print("Octave Offset... ");
   Serial.println(octave_offset);
 
-  play_note(note1 + octave_offset, 800);
-  play_note(note2 + octave_offset, 800);
-  play_note(note3 + octave_offset, 800);
+  play_note(note1 + octave_offset, getReleaseTime( short_env_enabled() ));
+  play_note(note2 + octave_offset, getReleaseTime( short_env_enabled() ));
+  play_note(note3 + octave_offset, getReleaseTime( short_env_enabled() ));
 }
 
 void start_play_weird(){
@@ -1299,6 +1314,10 @@ int updateAudio(){
       // gain * filter(oscnext)
       if(mode == REGNOTEMODE || mode == ARPMODE){
         sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
+
+      } else if(mode == ARPMODE){
+
+        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i+1) * 0.89)  );
       } else if(mode == CHORDMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
