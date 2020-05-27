@@ -327,6 +327,9 @@ uint8_t arp_note_index = 0;
 // this is for timing out arp notes
 EventDelay arp_delay = EventDelay(300);
 
+uint8_t repeat_notes[4] = {0,0,0,0};
+
+
 // for each chord
 // EventDelay chord_delay = EventDelay(1300);
 
@@ -359,18 +362,45 @@ bool clockwise = false;
 
 long sweep_timer = mozziMicros();
 
-void play_note(int new_note, unsigned int delay_time){
-  int available_slot = 0;
+uint8_t available_note_slot(){
   for(int i=0; i<4; i++){
     // Serial.println("is_palying was");
     // Serial.println(notes[i]->is_playing());
+
+    if(mode == REPEATMODE && i>=2){
+      // save the top 2 Notes for repeating
+      break;
+    }
+
     if(notes[i]->is_available() == true){
       Serial.print(i);
       Serial.println(" was available to play...");
-      available_slot = i;
+      return i;
       break;
     }
   }
+
+  return 0;
+}
+
+void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
+  // int available_slot = 0;
+  // for(int i=0; i<4; i++){
+  //   // Serial.println("is_palying was");
+  //   // Serial.println(notes[i]->is_playing());
+
+  //   if(mode == REPEATMODE && i>=2){
+  //     // save the top 2 Notes for repeating
+  //     break;
+  //   }
+
+  //   if(notes[i]->is_available() == true){
+  //     Serial.print(i);
+  //     Serial.println(" was available to play...");
+  //     available_slot = i;
+  //     break;
+  //   }
+  // }
   Serial.println("NOTE IS");
   Serial.println(new_note);
   float freq = note_to_freq(new_note);
@@ -381,7 +411,7 @@ void play_note(int new_note, unsigned int delay_time){
   // Serial.println("Maybe it fucking worked");
   // Serial.println(notes[available_slot]->get_frequency());
   
-  if(mode == REGNOTEMODE){
+  if(mode == REGNOTEMODE || mode == REPEATMODE){
     // this is the which notes[i] slot were playing from in regular mode
     current_note = available_slot;  
   }
@@ -445,7 +475,10 @@ void play_arp_notes(){
     next_note += rotary_position;
 
     arp_note_index += 1;
-    play_note(next_note, getReleaseTime(short_env_enabled()));
+
+    int r_time = getReleaseTime( short_env_enabled() );
+    uint8_t available_slot = available_note_slot();
+    play_note(next_note, r_time, available_slot);
     uint16_t arp_time;
 
     if(short_env_enabled()){
@@ -541,9 +574,11 @@ void handle_note_button(){
       // only do osmething if the new button state is HIGH (uh)
       if(button_state && current_note<0) {
 
+        uint8_t available_slot = available_note_slot();
+
         // HERE MEANS I"M GOING TO start PLAYing SOMTHING
         if(mode == REGNOTEMODE){
-          // input_freq = random(130, 4186);
+          // input_freq = random(130, 4186);72 + rotary_position
 
           // next note is C3 offset by current rotary value!
           // Serial.print("Trying to play");
@@ -551,7 +586,7 @@ void handle_note_button(){
           // Serial.print("rotary_position");
           // Serial.println(rotary_position);
           // play_note(48 + rotary_position, 0);
-          play_note(72 + rotary_position, 0);
+          play_note(72 + rotary_position, 0, available_slot);
         } else if(mode == ARPMODE){
           play_continuing = PLAYING;
         } else if(mode == WEIRDMODE){
@@ -572,6 +607,14 @@ void handle_note_button(){
           play_schema_chord(60+rotary_position);
         } else if(mode == SWEEPMODE){
           start_play_sweep();
+        } else if(mode == REPEATMODE){
+
+          Serial.println("Playing Repeat");
+
+          uint8_t note = 72 + rotary_position;
+          play_note(note, 0, available_slot);
+          setRepeatNote(note);
+
         }
         
       } else if(!button_state) {
@@ -605,6 +648,43 @@ void handle_note_button(){
 
   // save the reading. Next time through the loop, it'll be the lastButtonState:
   last_button_state = reading;
+}
+
+void setRepeatNote(uint8_t note){
+
+    uint8_t available_slot = 2;
+    for(int i=2; i<4; i++){
+
+    if(notes[i]->is_available() == true){
+      Serial.print(i);
+      Serial.println(" was available to set repeat...");
+      available_slot = i;
+      break;
+    }
+  }
+
+  // wait 1 sec ... then play elsewheref  
+  note_delays[available_slot]->start(1000);
+
+  for(uint8_t i=0;i<4;i++){
+    if(repeat_notes[i] == 0){
+      // save which note to repeat at the first available spot
+      repeat_notes[i] = note;
+      break;
+    }
+  }
+}
+
+uint8_t getRepeatNote(){
+  for(uint8_t i=0; i<4;i++){
+    if(repeat_notes[i] > 0){
+      uint8_t note = repeat_notes[i];
+      repeat_notes[i] = 0;
+      return note;
+    }
+  }
+
+  return 0;
 }
 
 // chord based on starting note and selected chord shape
@@ -653,18 +733,19 @@ void play_schema_chord(uint8_t starting_note){
     note3 = starting_note+7;
   }
 
-  play_note(note1, 1000);
+// just set which slot to what we want
+  play_note(note1, 1000, 0);
 
   if(note2 > 0){
-    play_note(note2, 1000);
+    play_note(note2, 1000, 1);
   }
 
   if(note3 > 0){
-    play_note(note3, 1000);
+    play_note(note3, 1000, 2);
   }
 
   if(note4 > 0){
-    play_note(note4, 1000);
+    play_note(note4, 1000, 3);
   }
 }
 
@@ -728,9 +809,19 @@ void play_seq_chord(int note_offset){
   Serial.print("Octave Offset... ");
   Serial.println(octave_offset);
 
-  play_note(note1 + octave_offset, getReleaseTime( short_env_enabled() ));
-  play_note(note2 + octave_offset, getReleaseTime( short_env_enabled() ));
-  play_note(note3 + octave_offset, getReleaseTime( short_env_enabled() ));
+
+
+
+  int r_time = getReleaseTime( short_env_enabled() );
+  
+  uint8_t available_slot = available_note_slot();
+  play_note(note1 + octave_offset, r_time, available_slot);
+  
+  available_slot = available_note_slot();
+  play_note(note2 + octave_offset, r_time, available_slot);
+  
+  available_slot = available_note_slot();
+  play_note(note3 + octave_offset, r_time, available_slot);
 }
 
 void start_play_weird(){
@@ -1182,6 +1273,45 @@ void updateControl() {
         set_sweep_freq();
         sweep_timer = mozziMicros();
       }
+    } else if(mode == REPEATMODE){
+
+      if(i < 2){
+
+        if(notes[i]->is_playing() && current_note != i){
+
+          // do regular note off if button not held for this note
+          notes[i]->note_off();
+          note_delays[i]->start(800);
+          // notes[i]->set_available(false);
+        } else if(note_delays[i]->ready()){
+
+          notes[i]->set_available(true);
+        }
+
+      } else {
+
+        // 2,3 are for repeatnotes
+
+        // first note delay to be ready should correspond to first available repeatnote
+        if(  note_delays[i]->ready() ){
+
+          // grabs and delets first found repeatnote
+          uint8_t note = getRepeatNote();
+          if(note > 0){
+
+            // yes, werre repeating, start playing a repeat note, this will start another timer for the note we play
+            Serial.print("I payed a repeat dummy ");
+            Serial.println(note);
+            play_note(note, 600, i);
+          } else {
+
+            // note was still playing, so now start note off for repeat note
+            notes[i]->note_off();
+            note_delays[i]->start(800);
+            notes[i]->set_available(true);
+          }
+        }
+      }
     }
 
     // shut off after we waited for the release
@@ -1312,7 +1442,7 @@ int updateAudio(){
       }
 
       // gain * filter(oscnext)
-      if(mode == REGNOTEMODE || mode == ARPMODE){
+      if(mode == REGNOTEMODE || mode == ARPMODE || mode == REPEATMODE){
         sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
 
       } else if(mode == ARPMODE){
