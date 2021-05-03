@@ -1049,7 +1049,7 @@ void setup(){
   // seed dat
   // randomSeed(analogRead(0));
 
-  Serial.begin(9600);
+  // Serial.begin(9600);
   startMozzi(CONTROL_RATE); // :)
   note0 = Note(0, 0);
   note1 = Note(1, 0);
@@ -1059,10 +1059,6 @@ void setup(){
   notes[1] = &note1;
   notes[2] = &note2;
   notes[3] = &note3;
-
-  for(byte i=0; i<4; i++){
-    notes[i]->set_available(true);
-  }
 
 
   // these are for letting notes play out their envs!
@@ -1260,6 +1256,9 @@ void setDisplayMode(byte dmode){
   } else if(dmode == COOL){
     Serial.println("I started coolmode");
     zeroOutDisplay = true;
+  } else if (dmode == WEIRD){
+    display_idle_timer = mozziMicros();
+    Serial.println("I started weridmode");
   }
   if(zeroOutDisplay){
     for(byte i=0; i<21; i++){
@@ -1330,8 +1329,8 @@ void updateControl() {
         note_delays[i]->start(800);
         
         // get rid of that pip
-        Serial.print("Stop pip! ");
-        Serial.println(i);
+        // Serial.print("Stop pip! ");
+        // Serial.println(i);
         displayPlayNotes[i] = false;
 
       } else if(note_delays[i]->ready()){
@@ -1455,9 +1454,6 @@ void writeDisplay(){
       // Serial.print(pixel_colors[pixcolorindex+1]);
       // Serial.print(" ");
       // Serial.println(pixel_colors[pixcolorindex+2]);
-
-      Serial.print("hello! r for pix is now ");
-      Serial.println(pixel_colors[pixcolorindex]);
       pixel.setPixelColor( i, pixel.Color(pixel_colors[pixcolorindex], pixel_colors[pixcolorindex+1], pixel_colors[pixcolorindex+2]) );
 
       pixel.show();
@@ -1478,7 +1474,7 @@ void showWeird(){
   if(buffer_amount > 0){
 
     // x3 so its just one loop to 255 each rgb
-    byte numlights = floor(buffer_amount/21);
+    byte numlights = floor(buffer_amount/16);
     Serial.print("Numlights is ");
     Serial.println(numlights);
     for(byte i=0; i<21; i++){
@@ -1574,8 +1570,8 @@ void showCool(){
 
     if( colorCloseEnough(pixel_colors[pixcolorindex], dest_pixel_colors[pixcolorindex]) && colorCloseEnough(pixel_colors[pixcolorindex+1], dest_pixel_colors[pixcolorindex+1]) && colorCloseEnough(pixel_colors[pixcolorindex+2], dest_pixel_colors[pixcolorindex+2]) ){
 
-      Serial.print("I set new color for ");
-      Serial.println(pixcolorindex);
+      // Serial.print("I set new color for ");
+      // Serial.println(pixcolorindex);
 
       // if we reached the rgb desgination for this pixel
       // preserve dest color as from color so we can fade propaly
@@ -1676,7 +1672,7 @@ int updateAudio(){
         buffer[buffcount] = (char) sig/2.0;
         // fill up lights as we fill buffer
         if(buffer_amount < BUFFER_LENGTH){
-          buffer_amount++;
+          buffer_amount += 2;
         }
       }
 
@@ -1739,15 +1735,14 @@ int updateAudio(){
           // stop repeating buffer playback after 5
           bufferreplay = 0;
           buffer_empty = true;
-
-          if(buffer_amount > 0){
-            // we finsihed using  a buffer sample, drain out (for lights), only on last repeat
-            Serial.print("Sink buffer amt ");
-            Serial.println(buffer_amount);
-            buffer_amount--;
-          }
-
         }
+      }
+
+      if(buffer_amount > 0){
+        // we finsihed using  a buffer sample, drain out (for lights), only on last repeat
+        Serial.print("Sink buffer amt ");
+        Serial.println(buffer_amount);
+        buffer_amount -= 4;
       }
     }
     
