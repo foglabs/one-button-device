@@ -40,8 +40,8 @@ Cancel button?
 // #include <Phasor.h>
 
 #include <mozzi_midi.h>
-#include <tables/sin8192_int8.h> // sine table for oscillator
-#include <tables/cos8192_int8.h> // sine table for oscillator
+#include <tables/sin4096_int8.h> // sine table for oscillator
+#include <tables/cos4096_int8.h> // sine table for oscillator
 
 // da pix
 #include <Adafruit_NeoPixel.h>
@@ -53,6 +53,7 @@ Cancel button?
 #define COOL 0
 #define SHOWMODE 1
 #define PLAY 2
+#define WEIRD 3
 
 long pixel_timer = mozziMicros();
 long display_idle_timer = mozziMicros();
@@ -64,18 +65,18 @@ byte dest_pixel_colors[21];
 uint8_t pixel_lerp_steps[7];
 byte display_mode;
 
-EventDelay pixelDelay = EventDelay(800);
-bool noteWaits[4] = { false, false, false, false };
+bool displayPlayNotes[4] = { false, false, false, false };
+byte buffer_amount = 0;
 
 
 // use: Oscil <table_size, update_rate> oscilName (wavetable), look in .h file of table #included above
-Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin0(SIN8192_DATA);
-Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin1(SIN8192_DATA);
-Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin2(SIN8192_DATA);
-Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin3(SIN8192_DATA);
+Oscil <SIN4096_NUM_CELLS, AUDIO_RATE> aSin0(SIN4096_DATA);
+Oscil <SIN4096_NUM_CELLS, AUDIO_RATE> aSin1(SIN4096_DATA);
+Oscil <SIN4096_NUM_CELLS, AUDIO_RATE> aSin2(SIN4096_DATA);
+Oscil <SIN4096_NUM_CELLS, AUDIO_RATE> aSin3(SIN4096_DATA);
 
 // davibrato :D
-Oscil<COS8192_NUM_CELLS, AUDIO_RATE> aVibrato(COS8192_DATA);
+Oscil<COS4096_NUM_CELLS, AUDIO_RATE> aVibrato(COS4096_DATA);
 
 // use #define for CONTROL_RATE, not a constant
 #define CONTROL_RATE 256 // Hz, powers of 2 are most reliable
@@ -452,6 +453,10 @@ void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
     setDisplayMode(PLAY);
   }
 
+  // show a pip for this note goddamnit!
+  displayPlayNote(available_slot);
+  Serial.print("Start display for ");
+  Serial.println(available_slot);
   // keep resetting disp timer os play stay (rather than go back to cool)
   display_idle_timer = mozziMicros();
 }
@@ -620,6 +625,10 @@ void handle_note_button(){
         } else if(mode == WEIRDMODE){
           // do some ol other shit
           start_play_weird();
+          
+          // show buffer fill on pixel now tghat were playing
+          setDisplayMode(WEIRD);
+
         } else if(mode == CHORDMODE){
 
           // play a chord
@@ -664,6 +673,7 @@ void handle_note_button(){
           for(uint8_t i=0; i<4; i++){
             // start noteoffs because button was released
             notes[i]->note_off();
+            displayPlayNotes[i] = false;
           }
         } else if(mode == SWEEPMODE){
 
@@ -717,9 +727,10 @@ byte getRepeatNote(){
 
 // chord based on starting note and selected chord shape
 void play_schema_chord(byte starting_note){
-    for(byte i=0; i<4; i++) {
+  for(byte i=0; i<4; i++) {
     notes[i]->note_off();
     notes[i]->set_available(true);
+    displayPlayNotes[i] = false;
   }
   byte note1 = 0;
   byte note2 = 0;
@@ -783,6 +794,8 @@ void play_seq_chord(byte note_offset){
   for(byte i=0; i<4; i++) {
     notes[i]->note_off();
     notes[i]->set_available(true);
+
+    displayPlayNotes[i] = false;
   }
   byte note1;
   byte note2;
@@ -837,9 +850,6 @@ void play_seq_chord(byte note_offset){
   Serial.print("Octave Offset... ");
   Serial.println(octave_offset);
 
-
-
-
   int r_time = getReleaseTime( short_env_enabled() );
   
   byte available_slot = available_note_slot();
@@ -853,11 +863,13 @@ void play_seq_chord(byte note_offset){
 }
 
 void start_play_weird(){
+  // start playing all oscs
   envelope0.noteOn(true);
   play_continuing = PLAYING;
 }
 
 void stop_play_weird(){
+  // stop playing - we using 1 env for all oscs
   envelope0.noteOff();
   play_continuing = TAILING;
 }
@@ -1048,6 +1060,10 @@ void setup(){
   notes[2] = &note2;
   notes[3] = &note3;
 
+  for(byte i=0; i<4; i++){
+    notes[i]->set_available(true);
+  }
+
 
   // these are for letting notes play out their envs!
   EventDelay event_delay0 = EventDelay(3000);
@@ -1060,7 +1076,6 @@ void setup(){
   note_delays[3] = &event_delay3;
 
   setup_envelopes(false);
-
   setup_mode(REGNOTEMODE);
 }
 
@@ -1313,19 +1328,25 @@ void updateControl() {
         // do regular note off if button not held for this note
         notes[i]->note_off();
         note_delays[i]->start(800);
-        // notes[i]->set_available(false);
+        
+        // get rid of that pip
+        Serial.print("Stop pip! ");
+        Serial.println(i);
+        displayPlayNotes[i] = false;
+
       } else if(note_delays[i]->ready()){
 
         notes[i]->set_available(true);
       }
 
     } else if(mode == CHORDMODE){
-
+      // bazwah?!
     } else if(mode == ARPMODE) {
       
       if(note_delays[i]->ready()){
         notes[i]->note_off();
         notes[i]->set_available(true);
+        displayPlayNotes[i] = false;
       }
 
     } else if(mode == WEIRDMODE){
@@ -1345,6 +1366,7 @@ void updateControl() {
 
           // do regular note off if button not held for this note
           notes[i]->note_off();
+          displayPlayNotes[i] = false;
           note_delays[i]->start(800);
           // notes[i]->set_available(false);
         } else if(note_delays[i]->ready()){
@@ -1373,6 +1395,7 @@ void updateControl() {
             notes[i]->note_off();
             note_delays[i]->start(800);
             notes[i]->set_available(true);
+            displayPlayNotes[i] = false;
           }
         }
       }
@@ -1398,12 +1421,18 @@ void handleDisplay(){
     // display what mode were in
     showMode(mode);
   } else if(display_mode == PLAY){
+    // show notes and level
     showPlay();
+  } else if(display_mode == WEIRD){
+    // show buffer filling up
+    // then show buffer draining out
+    showWeird();
   }
 
-  if(display_mode != COOL && mozziMicros() - display_idle_timer >= 2000000){
+  if(display_mode != COOL && mozziMicros() - display_idle_timer >= 10000000){
     // go back after 2s
     setDisplayMode(COOL);
+    Serial.println("Set COOL again.");
   }
 }
 
@@ -1426,7 +1455,11 @@ void writeDisplay(){
       // Serial.print(pixel_colors[pixcolorindex+1]);
       // Serial.print(" ");
       // Serial.println(pixel_colors[pixcolorindex+2]);
+
+      Serial.print("hello! r for pix is now ");
+      Serial.println(pixel_colors[pixcolorindex]);
       pixel.setPixelColor( i, pixel.Color(pixel_colors[pixcolorindex], pixel_colors[pixcolorindex+1], pixel_colors[pixcolorindex+2]) );
+
       pixel.show();
     }
     pixel_timer = now;
@@ -1441,48 +1474,83 @@ bool colorCloseEnough(byte color, byte destColor){
   return inRange(destColor, destColor, color);
 }
 
+void showWeird(){
+  if(buffer_amount > 0){
+
+    // x3 so its just one loop to 255 each rgb
+    byte numlights = floor(buffer_amount/21);
+    Serial.print("Numlights is ");
+    Serial.println(numlights);
+    for(byte i=0; i<21; i++){
+        
+      if(i<numlights){
+        pixel_colors[i] = 255;
+      } else {
+        pixel_colors[i] = 0;
+      }
+    }
+
+  }
+}
+
 void showPlay(){
   // well hi
-  byte notePlayin = -1;
   byte pixcolorindex;
-
+  bool someonePlayin = false;
   for(byte i=0; i<4; i++){
-
-    if(!noteWaits[i] && !notes[i]->is_available()){
-      // note is playin but not already lit
-
-      // memba dis
-      pixcolorindex = i * 3;
-
-      // set rand color on corresponding jewel
+    pixcolorindex = i * 3;
+    if(displayPlayNotes[i]){
+      someonePlayin = true;
+    } else {
+      // if it aint playin, shut it off
       pixel_colors[pixcolorindex] = 0;
-      pixel_colors[pixcolorindex+1] = 255;
+      pixel_colors[pixcolorindex+1] = 0;
       pixel_colors[pixcolorindex+2] = 0;
-
-      notePlayin = i;
-      noteWaits[i] = true;
-      pixelDelay.start(800);
     }
   }
+
+
+  byte decrement;
+  for(byte i=12; i<21; i++){
+    if(!someonePlayin){
+      
+      // fade the 'higher' meter pixels faster so it fades down
+      decrement = (21 - i) * 8;
+
+      if(pixel_colors[i] > 0){
+        // fade down
+        // Serial.print("Fade down stupid! ");
+        // Serial.println(decrement);
+
+        if(decrement < pixel_colors[i]){
+          // DONT go 'below' 0, you not gonna like it
+          pixel_colors[i] = pixel_colors[i] - decrement;
+        } else {
+          pixel_colors[i] = 0;
+        }
+      }      
+    }
+  }
+}
+
+void displayPlayNote(byte note_index){
+  // well hi
+  byte pixcolorindex = note_index * 3;
+  displayPlayNotes[note_index] = true;
+
+  // note is playin but not already lit
+
+  // set rand color on corresponding jewel
+  Serial.print("Setting pix at ");
+  Serial.println(pixcolorindex);
+
+  pixel_colors[pixcolorindex] = rand() % 64;
+  pixel_colors[pixcolorindex+1] = rand() % 32;
+  pixel_colors[pixcolorindex+2] = rand() % 128;
 
   for(byte i=12; i<21; i++){
-    if(notePlayin >= 0){
-      // if its notes playin, turn on the lgiths
-      pixel_colors[i] = 255;
-      pixel_colors[i+1] = 255;
-      pixel_colors[i+2] = 255;
-    }
-
-    if(pixelDelay.ready()){
-      noteWaits[i] = false;
-    }
-  }
-
-  for(byte i=0; i<21; i++){
-    if(pixel_colors[i] > 0){
-      // fade down
-      pixel_colors[i]--;
-    }
+    // if its notes playin, turn on the meter lgiths
+    pixel_colors[i] = 255;
   }
 }
 
@@ -1525,12 +1593,12 @@ void showCool(){
       dest_pixel_colors[pixcolorindex+2] = rand() % 150;
       pixel_lerp_steps[pixcolorindex+2] = 0;
 
-      Serial.print("The new destination is.. ");
-      Serial.print(dest_pixel_colors[pixcolorindex]);
-      Serial.print(" ");
-      Serial.print(dest_pixel_colors[pixcolorindex+1]);
-      Serial.print(" ");
-      Serial.print(dest_pixel_colors[pixcolorindex+2]);
+      // Serial.print("The new destination is.. ");
+      // Serial.print(dest_pixel_colors[pixcolorindex]);
+      // Serial.print(" ");
+      // Serial.print(dest_pixel_colors[pixcolorindex+1]);
+      // Serial.print(" ");
+      // Serial.print(dest_pixel_colors[pixcolorindex+2]);
     } else {
       for(byte x=0; x<3; x++){
         // loop through r,g,b for each pixel
@@ -1606,6 +1674,10 @@ int updateAudio(){
 
         // only TAKE a sample once every 63 or whatever
         buffer[buffcount] = (char) sig/2.0;
+        // fill up lights as we fill buffer
+        if(buffer_amount < BUFFER_LENGTH){
+          buffer_amount++;
+        }
       }
 
       buffstepcount++;
@@ -1667,6 +1739,14 @@ int updateAudio(){
           // stop repeating buffer playback after 5
           bufferreplay = 0;
           buffer_empty = true;
+
+          if(buffer_amount > 0){
+            // we finsihed using  a buffer sample, drain out (for lights), only on last repeat
+            Serial.print("Sink buffer amt ");
+            Serial.println(buffer_amount);
+            buffer_amount--;
+          }
+
         }
       }
     }
