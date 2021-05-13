@@ -1,0 +1,67 @@
+ti capacitor pdf:
+"In many audio applications such as analog filter design, the preferred solution is to use C0G/NP0 ceramic capaci-tors because they have much better performance and are still available in small packages. While this is a great solu-tion, it is not always feasible. In audio signal chains, keeping resistances low minimizes noise, but doing so requires increased capacitance for a given cutoff frequency. C0G/NP0 capacitors are not easily found in values greater than 1 μF, so they have limited utility in AC-coupling and other high-pass filter applications"
+
+
+lo lo resistance for audio filter circuit for less noise
+so higher capac
+
+measurements
+
+audio hole
+  27mm( or whatev) from corner
+  22mm from top edge
+
+display hole
+  24mm hole
+
+  21mm fr long edge
+  35mm fr short edge
+
+arcade hole
+  24mm hole
+
+  32mm fr long edge
+  35mm fr short edge
+
+rotary
+  1 large drill hole
+  32mm from short edge
+
+  4 small drill holes  
+  2 on mounting holes
+  2 more 22mm straight across pcb
+
+  black acrylic underneath
+    snug up against display acrylic, then drill 4 holes
+
+
+3 10mm switches
+
+  3 large drill holes
+    16mm,
+    32mm,
+    48mm from short edge
+    32mm from long edge
+
+
+
+
+
+
+
+  add
+    breautymode
+
+    hold+tap mode to set tempo in ARPMODE
+
+  
+standardplus?
+  its the mode == beautymode
+    works when same num statements but
+      == false
+      == 'poop'
+
+    works with two copies of == REPEATMODE
+
+    code doesnt mater
+    
