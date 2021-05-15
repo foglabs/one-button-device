@@ -51,6 +51,7 @@ Cancel button?
 #define PIXDELAY 4000
 // #define NUMPIXFADESTEPS 160.0
 
+// display modes
 #define COOL 0
 #define SHOWMODE 1
 #define PLAY 2
@@ -76,6 +77,14 @@ bool displayPlayNotes[4] = { false, false, false, false };
 byte buffer_amount = 0;
 byte brightness_factor = 1;
 
+// envelope modes wow!
+#define SHORT_ENV 0
+#define LONG_ENV 1
+#define BEAUTY_SHORT_ENV 2
+#define BEAUTY_LONG_ENV 3
+#define PIANO_SHORT_ENV 4
+#define PIANO_LONG_ENV 5
+byte envelope_mode = SHORT_ENV;
 
 // use: Oscil <table_size, update_rate> oscilName (wavetable), look in .h file of table #included above
 Oscil <SIN8192_NUM_CELLS, AUDIO_RATE> aSin0(SIN8192_DATA);
@@ -521,11 +530,11 @@ void play_arp_notes(){
 
     arp_note_index += 1;
 
-    int r_time = getReleaseTime( short_env_enabled() );
     byte available_slot = available_note_slot();
-    play_note(next_note, r_time, available_slot);
+    play_note(next_note, getReleaseTime( envelope_mode ), available_slot);
     uint16_t arp_time;
 
+    // keep this, not same thing as envelope setting
     if(short_env_enabled()){
       arp_time = 300;
     } else {
@@ -615,6 +624,7 @@ void handle_note_button(){
     // if the button state has changed:
     if (reading != button_state) {
       button_state = reading;
+      Serial.println(F("button changed"));
 
       // only do osmething if the new button state is HIGH (uh)
       if(button_state && current_note<0) {
@@ -671,19 +681,23 @@ void handle_note_button(){
 
           // play overtones fool
           Serial.println(F("trying hard to play beauty..."));
-          play_note(72 + rotary_position, 2000, 0);
-          play_note(84 + rotary_position, 100, 1);
-          play_note(91 + rotary_position, 2000, 2);
-          play_note(96 + rotary_position, 3000, 3);
+          play_note(72 + rotary_position, getNoteTime(envelope_mode), 0);
+          play_note(84 + rotary_position, getNoteTime(envelope_mode), 1);
+          play_note(96 + rotary_position, getNoteTime(envelope_mode), 2);
+          play_note(96 + rotary_position, getNoteTime(envelope_mode), 3);
         } else if(mode == PIANOMODE){
           // next note is C3 offset by current rotary value!
 
           // play overtones fool
           Serial.println(F("trying hard to play piano..."));
-          play_note(72 + rotary_position, 1800, 0);
-          play_note(84 + rotary_position, 800, 1);
-          play_note(91 + rotary_position, 400, 2);
-          play_note(96 + rotary_position, 600, 3);
+          // fund
+          play_note(72 + rotary_position, getNoteTime(envelope_mode), 0);
+          // +perfect fifth
+          play_note(79 + rotary_position, getNoteTime(envelope_mode), 1);
+          //  +octave+4
+          play_note(88 + rotary_position, getNoteTime(envelope_mode), 2);
+          // +3octave+7 semitones? seemed like strong harmonic in spectrum
+          play_note(115 + rotary_position, getNoteTime(envelope_mode), 3);
         } else {
           // something
         }
@@ -884,7 +898,7 @@ void play_seq_chord(byte note_offset){
   Serial.print(F("Octave Offset... "));
   Serial.println(octave_offset);
 
-  int r_time = getReleaseTime( short_env_enabled() );
+  int r_time = getReleaseTime( envelope_mode );
   
   byte available_slot = available_note_slot();
   play_note(note1 + octave_offset, r_time, available_slot);
@@ -922,8 +936,7 @@ void stop_play_sweep(){
   envelope0.noteOff();
   play_continuing = TAILING;
   // set up env timer for the one Note we're using (0)
-  Serial.println(getReleaseTime( short_env_enabled() ));
-  note_delays[0]->start( 1000 );
+  note_delays[0]->start( getReleaseTime(envelope_mode) );
 }
 // effects helpers
 bool flanger_enabled(){
@@ -936,8 +949,9 @@ bool compressor_enabled(){
 }
 
 bool short_env_enabled(){
-  // YOOO
+  // YOOO sort this shit out when you have multiples
   return toggles[0];
+
   return toggles[2];
 }
 
@@ -1068,8 +1082,8 @@ void setup(){
   arp_delay.start(300);
 
   // lpf currently applied to EVERYTHING, maybe dump if corrected passive filter sounds better
-  lpf.setResonance(20);
-  lpf.setCutoffFreq(14000);
+  lpf.setResonance(64);
+  lpf.setCutoffFreq(18000);
 
 
   // float phase_freq = 55.f;
@@ -1110,145 +1124,147 @@ void setup(){
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
 
-  setup_envelopes(false);
-  setup_mode(PIANOMODE);
+  // setup_envelopes(false);
+  setup_mode(REGNOTEMODE);
 }
 
-void setup_envelopes(bool short_env){
+unsigned int getReleaseTime(byte env_mode){
+  if(env_mode == SHORT_ENV){
+    return 600;
+  } else if(env_mode == LONG_ENV){
+    return 3000;
+  }
+}
 
-  unsigned int a_t = 0;
-  unsigned int d_t = 0;
-  unsigned int s_t = 0;
-  unsigned int r_t = 0;
-  byte a_level = 0;
-  byte d_level = 0;
-  byte s_level = 0;
-  byte r_level = 0;
+unsigned int getNoteTime(byte env_mode){
+  if(env_mode == BEAUTY_SHORT_ENV){
+    return 800;
+  } else if(env_mode == BEAUTY_LONG_ENV){
+    return 6000;
+  } else if(env_mode == PIANO_SHORT_ENV){
+    return 480;
+  } else if(env_mode == PIANO_LONG_ENV){
+    return 3000;
+  } else if(env_mode == SHORT_ENV){
+    return 1600;
+  } else if(env_mode == LONG_ENV){
+    return 8000;
+  } 
+}
 
-  // if(short_env){
-  
-  //   a_t = 10;
-  //   a_level = 255;
-  //   d_t = 10;
-  //   d_level = 255;
-  //   s_t = 10000;
-  //   s_level = 0;
-  //   r_t = 100;
-  //   r_level = 0;
-  // } else {
+void setup_envelopes(byte env_mode){
 
-  //   a_t = 120;
-  //   a_level = 255;
-  //   d_t = 300;
-  //   d_level = 255;
-  //   s_t = 4000;
-  //   s_level = 0;
-  //   r_t = 1600;
-  //   r_level = 0;
-  // }
-  
-  a_t = msToMozziTime( getAttackTime(short_env) );
-  a_level = getAttackLevel(short_env);
-  d_t =msToMozziTime(  getDecayTime(short_env) );
-  d_level = getDecayLevel(short_env);
-  s_t = msToMozziTime( getSustainTime(short_env) );
-  s_level = getSustainLevel(short_env);
-  r_t = msToMozziTime( getReleaseTime(short_env) );
-  r_level = getReleaseLevel(short_env);
 
-  // aSin0.setFreq(freq);
-  envelope0.setADLevels(a_level,d_level);
-  // milliseconds
-  envelope0.setTimes(a_t,d_t,s_t,r_t);
+  // theses are in ms baby
+  if(env_mode == SHORT_ENV || env_mode == LONG_ENV){
+    uint8_t a_t;
+    uint8_t d_t;
+    uint8_t s_t;
+    uint8_t r_t;
+    byte a_level;
+    byte d_level;
+
+    // most modes use the same ADSR for each Note because they only have one voice
+    if(env_mode == SHORT_ENV){
+      a_t = msToMozziTime(80);
+      d_t = msToMozziTime(60);
+      s_t = msToMozziTime(200000);
+      r_t = msToMozziTime( getReleaseTime(env_mode) );
+
+      a_level = 255;
+      d_level = 255;
+    } else if(env_mode == LONG_ENV){
+      a_t = msToMozziTime(480);
+      d_t = msToMozziTime(300);
+      s_t = msToMozziTime(400000);
+      r_t = msToMozziTime(getReleaseTime(env_mode));
+
+      a_level = 255;
+      d_level = 255;
+    }
+
+    envelope0.setADLevels(a_level,d_level);
+    // not milliseconds
+    envelope0.setTimes(a_t,d_t,s_t,r_t);
+    envelope1.setADLevels(a_level,d_level);
+    // not milliseconds
+    envelope1.setTimes(a_t,d_t,s_t,r_t);
+    envelope2.setADLevels(a_level,d_level);
+    // not milliseconds
+    envelope2.setTimes(a_t,d_t,s_t,r_t);
+    envelope3.setADLevels(a_level,d_level);
+    // not milliseconds
+    envelope3.setTimes(a_t,d_t,s_t,r_t);
+  } else if(env_mode == BEAUTY_SHORT_ENV) {
+    envelope0.setADLevels(255,225);
+    envelope1.setADLevels(255,225);
+    envelope2.setADLevels(255,225);
+    envelope3.setADLevels(255,225);
+
+    envelope0.setTimes(msToMozziTime(60), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(100) );
+
+    envelope1.setTimes(msToMozziTime(60), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(100) );
+    
+    envelope2.setTimes(msToMozziTime(60), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(100) );
+    
+    envelope3.setTimes(msToMozziTime(60), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(100) );
+
+    
+  } else if(env_mode == BEAUTY_LONG_ENV) {
+    envelope0.setADLevels(255,225);
+    envelope1.setADLevels(255,225);
+    envelope2.setADLevels(255,225);
+    envelope3.setADLevels(255,225);
+
+    envelope0.setTimes(msToMozziTime(300), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(100) );
+
+    envelope1.setTimes(msToMozziTime(260), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(100) );
+    
+    envelope2.setTimes(msToMozziTime(240), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(100) );
+    
+    envelope3.setTimes(msToMozziTime(180), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(100) );
+
+  } else if(env_mode == PIANO_SHORT_ENV) {
+    envelope0.setADLevels(255,225);
+    envelope1.setADLevels(255,225);
+    envelope2.setADLevels(255,225);
+    envelope3.setADLevels(255,225);
+
+    // fundamental
+    envelope0.setTimes(msToMozziTime(80), msToMozziTime(50), msToMozziTime(200000), msToMozziTime(200) );
+
+    // fifth - 2/3 length
+    envelope1.setTimes(msToMozziTime(80), msToMozziTime(50), msToMozziTime(200000), msToMozziTime(120) );
+    
+    // 2x fundamental - half length
+    envelope2.setTimes(msToMozziTime(80), msToMozziTime(50), msToMozziTime(200000), msToMozziTime(100) );
+    
+    // 21 semitone idk - 2/3 lengh of fund
+    envelope3.setTimes(msToMozziTime(80), msToMozziTime(50), msToMozziTime(200000), msToMozziTime(120) );
+
+  } else if(env_mode == PIANO_LONG_ENV) {
+    envelope0.setADLevels(255,225);
+    envelope1.setADLevels(255,225);
+    envelope2.setADLevels(255,225);
+    envelope3.setADLevels(255,225);
+
+    envelope0.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(4800) );
+
+    envelope1.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(3200) );
+    
+    envelope2.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(2400) );
+    
+    envelope3.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(3200) );
+  }
+
   envelope0.update();
-
-  // aSin1.setFreq(freq);
-  envelope1.setADLevels(a_level,d_level);
-  // milliseconds
-  envelope1.setTimes(a_t,d_t,s_t,r_t);
   envelope1.update();
-
-  // aSin2.setFreq(freq);
-  envelope2.setADLevels(a_level,d_level);
-  // milliseconds
-  envelope2.setTimes(a_t,d_t,s_t,r_t);
   envelope2.update();
-
-  // aSin3.setFreq(freq);
-  envelope3.setADLevels(a_level,d_level);
-  // milliseconds
-  envelope3.setTimes(a_t,d_t,s_t,r_t);
   envelope3.update();
 }
 
-uint16_t msToMozziTime(uint16_t ms){
-  return (uint16_t) ms / 4;
-}
-
-uint16_t getAttackTime(bool short_env){
-  if(short_env){
-    return 40;
-    
-  } else {
-    return 480;
-  }
-}
-uint16_t getAttackLevel(bool short_env){
-  if(short_env){
-    return 255;
-  } else {
-
-    return 255;
-  }
-
-}
-uint16_t getDecayTime(bool short_env){
-  if(short_env){
-    return 10;
-  } else {
-
-    return 300;
-  }
-
-}
-uint16_t getDecayLevel(bool short_env){
-  if(short_env){
-    return 255;
-  } else {
-    return 255;
-  }
-
-}
-uint16_t getSustainTime(bool short_env){
-  if(short_env){
-    return 200000;
-  } else {
-    return 400000;
-  }
-
-}
-uint16_t getSustainLevel(bool short_env){
-  if(short_env){
-    return 255;
-  } else {
-    return 255;
-  }
-
-}
-uint16_t getReleaseTime(bool short_env){
-  if(short_env){
-    return 100;
-  } else {
-    return 800;
-  }
-
-}
-uint16_t getReleaseLevel(bool short_env){
-  if(short_env){
-    return 0;
-  } else {
-    return 0;
-  }
+unsigned int msToMozziTime(unsigned int ms){
+  return (unsigned int) ms / 4;
 }
 
 void setup_mode(byte newmode){
@@ -1257,12 +1273,19 @@ void setup_mode(byte newmode){
   // turn this off so we dont carry over from other mode
   play_continuing = STOPPED;
 
-  if(mode == REGNOTEMODE || mode == CHORDMODE || mode == CHORDSCHEMAMODE || mode == BEAUTYMODE|| mode == PIANOMODE ){
-    
-    envelope0.update();
-    envelope1.update();
-    envelope2.update();
-    envelope3.update();
+  // most modes follow short vs long env setting
+  if(short_env_enabled()){
+    envelope_mode = SHORT_ENV;
+  } else {
+    envelope_mode = LONG_ENV;
+  }
+
+  if(mode == REGNOTEMODE || mode == CHORDMODE || mode == CHORDSCHEMAMODE){
+    // gets done by setup_envelopes
+    // envelope0.update();
+    // envelope1.update();
+    // envelope2.update();
+    // envelope3.update();
   } else if(mode == ARPMODE){
 
   } else if(mode == WEIRDMODE){
@@ -1275,12 +1298,21 @@ void setup_mode(byte newmode){
     buffer_empty = true;
   } else if(mode == SWEEPMODE){
 
-    envelope0.update();
+    // not needed because of setupenvelopes
+    // envelope0.update();
+
     set_sweep_freq();
+  } else if(mode == BEAUTYMODE){
+    // yucky
+    envelope_mode = short_env_enabled() ? BEAUTY_SHORT_ENV : BEAUTY_LONG_ENV;
+  } else if(mode == PIANOMODE){
+    envelope_mode = short_env_enabled() ? PIANO_SHORT_ENV : PIANO_LONG_ENV;
   }
 
-  // qa dat display
+  // show the new mode
   setDisplayMode(SHOWMODE);
+  // set envelopes for this mode
+  setup_envelopes(envelope_mode);
 }
 
 void setDisplayMode(byte dmode){
@@ -1326,7 +1358,6 @@ void setDisplayMode(byte dmode){
 
 void updateControl() {
 
-  // why the fuck does this only work out here?! inside void get_rotary() function, ++ behaves differently
   bool aVal = digitalRead(ROTARY_A_PIN);
   if(aVal != last_a){
     // Means the knob is rotating// if the knob is rotating, we need to determine direction// We do that by reading pin B.
@@ -1345,6 +1376,7 @@ void updateControl() {
         // Serial.print("Rotary is now");
         // Serial.println(rotary_position);
     }
+
     Serial.print(F("Rotary postition is "));
     Serial.println(rotary_position);
 
@@ -1363,7 +1395,19 @@ void updateControl() {
 
   bool this_env_toggle = short_env_enabled();
   if(last_env_toggle != this_env_toggle){
-    setup_envelopes(short_env_enabled());
+    // when env length switch gets changed
+    if(mode == BEAUTYMODE){
+      // each env has its own setting
+      envelope_mode = this_env_toggle ? BEAUTY_SHORT_ENV : BEAUTY_LONG_ENV;
+    } else if(mode == PIANOMODE){
+      // each env has its own setting
+      envelope_mode = this_env_toggle ? PIANO_SHORT_ENV : PIANO_LONG_ENV;
+    } else {
+      // shared adsr values for envs
+      envelope_mode = this_env_toggle ? SHORT_ENV : LONG_ENV;
+    }
+  
+    setup_envelopes( envelope_mode );
   }
   last_env_toggle = this_env_toggle;
 
@@ -1381,15 +1425,14 @@ void updateControl() {
 
         // do regular note off if button not held for this note
         notes[i]->note_off();
-        note_delays[i]->start(800);
+        note_delays[i]->start( getNoteTime(envelope_mode) );
         
         // get rid of that pip
-        // Serial.print("Stop pip! ");
-        // Serial.println(i);
         displayPlayNotes[i] = false;
 
-      } else if(note_delays[i]->ready()){
-
+      } else if(!notes[i]->is_available() && note_delays[i]->ready()){
+        Serial.print(i);
+        Serial.println(F("Was ready!"));
         notes[i]->set_available(true);
       }
 
@@ -1983,7 +2026,8 @@ int updateAudio(){
       } else if(mode == PIANOMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i+1) * 0.48)  );
+        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i+1) * 0.68)  );
+        // sig += (int) ( notes[i]->env_next() );
       }
     }
   }
