@@ -1130,7 +1130,7 @@ void setup(){
 
 unsigned int getReleaseTime(byte env_mode){
   if(env_mode == SHORT_ENV){
-    return 600;
+    return 200;
   } else if(env_mode == LONG_ENV){
     return 3000;
   }
@@ -1146,9 +1146,9 @@ unsigned int getNoteTime(byte env_mode){
   } else if(env_mode == PIANO_LONG_ENV){
     return 3000;
   } else if(env_mode == SHORT_ENV){
-    return 1600;
+    return 800;
   } else if(env_mode == LONG_ENV){
-    return 8000;
+    return 3000;
   } 
 }
 
