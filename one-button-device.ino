@@ -762,8 +762,8 @@ void handle_note_button(){
 
           Serial.println(F("Playing Repeat"));
 
-          uint8_t note = 72 + rotary_position;
-          play_note(note, 0, available_slot);
+          int8_t note = 72 + rotary_position;
+          play_note(note, getArpTime(envelope_mode), available_slot);
           setRepeatNote(note);
 
         } else if(mode == BEAUTYMODE){
@@ -859,8 +859,8 @@ void setRepeatNote(byte note){
     }
   }
 
-  // wait 1 sec ... then play elsewheref  
-  note_delays[available_slot]->start(1000);
+  // wait 4 beats ... then play elsewheref  
+  note_delays[available_slot]->start( oneBeat() * 4 );
 
   for(byte i=0;i<4;i++){
     if(repeat_notes[i] == 0){
@@ -1247,20 +1247,24 @@ void setup(){
   setup_mode(REGNOTEMODE);
 }
 
+unsigned int oneBeat(){
+  return 60000 / tempo;
+}
+
 unsigned int getReleaseTime(byte env_mode){
   if(env_mode == SHORT_ENV){
-    return 60000 / tempo / 2;
+    return oneBeat() / 2;
   } else if(env_mode == LONG_ENV){
-    return 60000 / tempo * 2;
+    return oneBeat() * 2;
   }
 }
 
 unsigned int getArpTime(byte env_mode){
   if(env_mode == SHORT_ENV){
-    return 60000 / tempo;
+    return oneBeat();
   } else if(env_mode == LONG_ENV){
     // twice as long delay between notes in longenv
-    return 60000 / tempo * 2;
+    return oneBeat() * 2;
   }
 }
 
