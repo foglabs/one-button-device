@@ -565,7 +565,7 @@ void play_arp_notes(){
     byte available_slot = available_note_slot();
     play_note(next_note, getReleaseTime( envelope_mode ), available_slot);
 
-    uint16_t arp_time;
+    // uint16_t arp_time;
     // keep this, not same thing as envelope setting
     // if(short_env_enabled()){
     //   arp_time = 300;
@@ -577,12 +577,12 @@ void play_arp_notes(){
     // delay would be 1000
 
     // time_of_one_beat = 60s * 1(beat)/tempo;
-    arp_time = 60000 / tempo;
+    // arp_time = 60000 / tempo;
 
     // YOOO add 4 / measure (tempo/4) option with toggles
 
     // beginning of each beat
-    arp_delay.start(arp_time);
+    arp_delay.start( getArpTime(envelope_mode) );
   }
 }
 
@@ -771,23 +771,23 @@ void handle_note_button(){
 
           // play overtones fool
           // Serial.println(F("trying hard to play beauty..."));
-          play_note(72 + rotary_position, getNoteTime(envelope_mode), 0);
-          play_note(84 + rotary_position, getNoteTime(envelope_mode), 1);
-          play_note(96 + rotary_position, getNoteTime(envelope_mode), 2);
-          play_note(96 + rotary_position, getNoteTime(envelope_mode), 3);
+          play_note(72 + rotary_position, false, 0);
+          play_note(84 + rotary_position, false, 1);
+          play_note(96 + rotary_position, false, 2);
+          play_note(96 + rotary_position, false, 3);
         } else if(mode == PIANOMODE){
           // next note is C3 offset by current rotary value!
 
           // play overtones fool
           // Serial.println(F("trying hard to play piano..."));
           // fund
-          play_note(72 + rotary_position, getNoteTime(envelope_mode), 0);
+          play_note(72 + rotary_position, false, 0);
           // +perfect fifth
-          play_note(79 + rotary_position, getNoteTime(envelope_mode), 1);
+          play_note(79 + rotary_position, false, 1);
           //  +octave+4
-          play_note(88 + rotary_position, getNoteTime(envelope_mode), 2);
+          play_note(88 + rotary_position, false, 2);
           // +3octave+7 semitones? seemed like strong harmonic in spectrum
-          play_note(115 + rotary_position, getNoteTime(envelope_mode), 3);
+          play_note(115 + rotary_position, false, 3);
         } else if(mode == SETTEMPOMODE){
           // use button pushes to set tempo
 
@@ -1075,6 +1075,7 @@ bool short_env_enabled(){
 
 bool vibrato_enabled(){
   // defined near osc_next
+  return false;
   return toggles[2];
 }
 
@@ -1248,9 +1249,18 @@ void setup(){
 
 unsigned int getReleaseTime(byte env_mode){
   if(env_mode == SHORT_ENV){
-    return 200;
+    return 60000 / tempo / 2;
   } else if(env_mode == LONG_ENV){
-    return 1600;
+    return 60000 / tempo * 2;
+  }
+}
+
+unsigned int getArpTime(byte env_mode){
+  if(env_mode == SHORT_ENV){
+    return 60000 / tempo;
+  } else if(env_mode == LONG_ENV){
+    // twice as long delay between notes in longenv
+    return 60000 / tempo * 2;
   }
 }
 
@@ -1264,9 +1274,9 @@ unsigned int getNoteTime(byte env_mode){
   } else if(env_mode == PIANO_LONG_ENV){
     return 3000;
   } else if(env_mode == SHORT_ENV){
-    return 800;
+    return 200;
   } else if(env_mode == LONG_ENV){
-    return 800;
+    return 12200;
   } 
 }
 
@@ -1366,13 +1376,13 @@ void setup_envelopes(byte env_mode){
     envelope2.setADLevels(255,225);
     envelope3.setADLevels(255,225);
 
-    envelope0.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(4800) );
+    envelope0.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(1800) );
 
-    envelope1.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(3200) );
+    envelope1.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(2400) );
     
-    envelope2.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(2400) );
+    envelope2.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(900) );
     
-    envelope3.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(3200) );
+    envelope3.setTimes(msToMozziTime(40), msToMozziTime(180), msToMozziTime(200000), msToMozziTime(2400) );
   }
 
   envelope0.update();
@@ -1510,7 +1520,6 @@ void updateControl() {
           pixel_counter = 5;
           // show rotary UP
           pixel_flag = true;
-          Serial.println(F("UP!"));
         }
       } else {
         // Otherwise B changedfirst and we're moving CCW
@@ -1520,12 +1529,11 @@ void updateControl() {
 
           // show rotary DOWN
           pixel_flag = false;
-          Serial.println(F("DOWN!"));
         }
       }
 
-      Serial.print(F("Rotary postition is "));
-      Serial.println(rotary_position);
+      // Serial.print(F("Rotary postition is "));
+      // Serial.println(rotary_position);
 
       // only set when changing freq
       if(mode == WEIRDMODE){
@@ -1577,7 +1585,7 @@ void updateControl() {
 
         // do regular note off if button not held for this note
         notes[i]->note_off();
-        note_delays[i]->start( getNoteTime(envelope_mode) );
+        note_delays[i]->start( getReleaseTime(envelope_mode) );
         
         // get rid of that pip
         displayPlayNotes[i] = false;
@@ -1651,6 +1659,7 @@ void updateControl() {
       if(!button_state){
         // if note0 playing but button not held anymore
         notes[i]->note_off();
+        note_delays[i]->start(getReleaseTime(envelope_mode));
         displayPlayNotes[i] = false;
       }
     }
@@ -2203,8 +2212,8 @@ int updateAudio(){
 
       if(buffer_amount > 0 && buffer_amount > 4){
         // we finsihed using  a buffer sample, drain out (for lights), only on last repeat
-        Serial.print(F("Sink buffer amt "));
-        Serial.println(buffer_amount);
+        // Serial.print(F("Sink buffer amt "));
+        // Serial.println(buffer_amount);
         buffer_amount -= 4;
       }
     }
@@ -2225,28 +2234,28 @@ int updateAudio(){
     for(byte i=0; i<4; i++){
       notes[i]->update_envelope();
 
-      int next_sample;
-      if(vibrato_enabled()){
-        // intensity value * phase offset value
-        // Serial.println("Vibrato active...");
-        Q15n16 vibrato = (Q15n16) 160 * aVibrato.next();
-        next_sample = notes[i]->osc_phmod_next(vibrato);
-      } else {
-        next_sample = notes[i]->osc_next();
-      }
+      int next_sample = notes[i]->osc_next();
+      // if(vibrato_enabled()){
+      //   // intensity value * phase offset value
+      //   // Serial.println("Vibrato active...");
+      //   Q15n16 vibrato = (Q15n16) 160 * aVibrato.next();
+      //   next_sample = notes[i]->osc_phmod_next(vibrato);
+      // } else {
+      //   next_sample = notes[i]->osc_next();
+      // }
 
       // gain * filter(oscnext)
       // this was arpmode... mby put back?
-      if(mode == REGNOTEMODE ||  mode == REPEATMODE){
+      if(mode == REGNOTEMODE || mode == ARPMODE || mode == REPEATMODE){
         if( notes[i]->is_playing() ){
           sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
         }
         // sig += ( notes[i]->env_next() * next_sample );
 
       } else if(mode == ARPMODE){
-        // huh?! not sure if this makes sense (which Note does arp note play on)
-        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample )  );
-        // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.89)  );
+        // // huh?! not sure if this makes sense (which Note does arp note play on)
+        // sig += (int) ( notes[i]->env_next() * lpf.next( next_sample )  );
+        // // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.89)  );
       } else if(mode == CHORDMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
@@ -2260,7 +2269,7 @@ int updateAudio(){
       } else if(mode == BEAUTYMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i+1) )  );
+        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) );
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.48)  );
       } else if(mode == PIANOMODE){
 
