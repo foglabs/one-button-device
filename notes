@@ -69,7 +69,58 @@ standardplus?
 
 arpmode with LONG_ENV is too long!
   add custom env settings for arpmode
+  proably for all other modes as well
 
+
+
+
+
+88 beats / minute = tempo
+
+
+
+x/60000 = 88
+x/1 = 88
+
+
+60 * 1 / (now-m)
+
+
+shitty build
+----
+cut acrylic cresecent out with big circle drill
+cut big circle drill hole at top of 24mm arcade hole
+bore out switch holes with big drill
+check power and audio holes
+
+solder
+  audio jack
+  3 green switches
+  
+
+
+
+
+
+qa rotary changing and effects
+  notes dont seem to go down or up as much asy oure turning
+  tweak long envelope, too much attack
+  
+
+
+
+*exiting tempo mode -> block mode change for 3s
+*lower tempo mode hold time
+*show rotary change on display
+
+hold arcade AND rb to enter lpfChange mode....
+
+
+prob with SQWANCHY bad mode, all modes get borked...
+  
+
+overlapping notes on ARPMODE long env
+  need to 
 
 
 
