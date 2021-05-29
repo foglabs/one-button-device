@@ -127,16 +127,47 @@ overlapping notes on ARPMODE long env
 
 still getting hell noise on top of regnote mode and arpmode
   when holding for a long time
-  mostly fix
-
+  fixed, bad envelope times/using noteon(reset=true)
 
 probably weirdmode is where things get fucked up?
   nope
 
 
-
 weirdmode
-  
+  just doesnt really work
+
+
+repeatmode goes bad when you change notes
+  works otherwise
+
+
+
+
+
+
+
+
+
+major code spots
+  setup_mode
+    resets and state needed to start mode
+
+  button_state == true
+    start to play for various modes
+
+  button_state == false
+    stop playing for various modes
+
+  updatecontrol
+    toggle settings, read button
+
+  updateaudio
+    keep pulling signal for this mode
+
+
+
+
+
 
 
 

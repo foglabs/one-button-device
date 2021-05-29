@@ -187,6 +187,7 @@ byte chord_schema = 0;
 
 #define CHORDMODE -2
 #define CHORDSCHEMAMODE -5
+
 #define WEIRDMODE -10
 
 // set via setup_mode in setup()
@@ -459,23 +460,7 @@ byte available_note_slot(){
 }
 
 void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
-  // int available_slot = 0;
-  // for(int i=0; i<4; i++){
-  //   // Serial.println("is_palying was");
-  //   // Serial.println(notes[i]->is_playing());
 
-  //   if(mode == REPEATMODE && i>=2){
-  //     // save the top 2 Notes for repeating
-  //     break;
-  //   }
-
-  //   if(notes[i]->is_available() == true){
-  //     Serial.print(i);
-  //     Serial.println(" was available to play...");
-  //     available_slot = i;
-  //     break;
-  //   }
-  // }
   Serial.println(F("NOTE IS"));
   Serial.println(new_note);
   float freq = note_to_freq(new_note);
@@ -483,9 +468,6 @@ void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
   // Serial.println(freq);
   notes[available_slot]->set_frequency(freq);
 
-  // Serial.println("Maybe it fucking worked");
-  // Serial.println(notes[available_slot]->get_frequency());
-  
   if(mode == REGNOTEMODE || mode == REPEATMODE){
     // this is the which notes[i] slot were playing from in regular mode
 
@@ -493,7 +475,6 @@ void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
     current_note = available_slot;  
   }
   
-    
   Serial.println(F("Running ::note_on for "));
   Serial.println(available_slot);
   notes[available_slot]->note_on();
@@ -772,11 +753,12 @@ void handle_note_button(){
           // next note is C3 offset by current rotary value!
 
           // play overtones fool
-          // Serial.println(F("trying hard to play beauty..."));
-          play_note(72 + rotary_position, false, 0);
-          play_note(84 + rotary_position, false, 1);
-          play_note(96 + rotary_position, false, 2);
-          play_note(96 + rotary_position, false, 3);
+          Serial.print(F("trying hard to play beauty... "));
+          Serial.println(getNoteTime(envelope_mode));
+          play_note(72 + rotary_position, getNoteTime(envelope_mode), 0);
+          play_note(84 + rotary_position, getNoteTime(envelope_mode), 1);
+          play_note(96 + rotary_position, getNoteTime(envelope_mode), 2);
+          play_note(96 + rotary_position, getNoteTime(envelope_mode), 3);
         } else if(mode == PIANOMODE){
           // next note is C3 offset by current rotary value!
 
@@ -1273,9 +1255,9 @@ unsigned int getArpTime(byte env_mode){
 
 unsigned int getNoteTime(byte env_mode){
   if(env_mode == BEAUTY_SHORT_ENV){
-    return 800;
+    return 1600;
   } else if(env_mode == BEAUTY_LONG_ENV){
-    return 6000;
+    return 3200;
   } else if(env_mode == PIANO_SHORT_ENV){
     return 480;
   } else if(env_mode == PIANO_LONG_ENV){
@@ -1334,28 +1316,28 @@ void setup_envelopes(byte env_mode){
     envelope2.setADLevels(200,225);
     envelope3.setADLevels(200,225);
 
-    envelope0.setTimes(60, 180, 60000, 100 );
+    envelope0.setTimes(2, 40, 60000, 100 );
 
-    envelope1.setTimes(60, 180, 60000, 100 );
+    envelope1.setTimes(2, 60, 60000, 100 );
     
-    envelope2.setTimes(60, 180, 60000, 100 );
+    envelope2.setTimes(20, 80, 3000, 100 );
     
-    envelope3.setTimes(60, 180, 60000, 100 );
+    envelope3.setTimes(30, 60, 2000, 100 );
 
-    
+    Serial.println(F("I love bein in here!"));
   } else if(env_mode == BEAUTY_LONG_ENV) {
     envelope0.setADLevels(255,225);
     envelope1.setADLevels(255,225);
     envelope2.setADLevels(255,225);
     envelope3.setADLevels(255,225);
 
-    envelope0.setTimes(300, 180, 60000, 100 );
+    envelope0.setTimes(80, 60, 60000, 300 );
 
-    envelope1.setTimes(260, 180, 60000, 100 );
+    envelope1.setTimes(40, 60, 60000, 160 );
     
-    envelope2.setTimes(240, 180, 60000, 100 );
+    envelope2.setTimes(160, 120, 60000, 200 );
     
-    envelope3.setTimes(180, 180, 60000, 100 );
+    envelope3.setTimes(88, 80, 60000, 300 );
 
   } else if(env_mode == PIANO_SHORT_ENV) {
     envelope0.setADLevels(180,225);
@@ -1438,6 +1420,10 @@ void setup_mode(byte newmode){
   } else if(mode == BEAUTYMODE){
     // yucky
     envelope_mode = short_env_enabled() ? BEAUTY_SHORT_ENV : BEAUTY_LONG_ENV;
+
+    for(byte i=0; i<4; i++){
+      notes[i]->note_off(); 
+    }
   } else if(mode == PIANOMODE){
     envelope_mode = short_env_enabled() ? PIANO_SHORT_ENV : PIANO_LONG_ENV;
   } else if(mode == SETTEMPOMODE){
