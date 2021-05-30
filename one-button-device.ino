@@ -178,12 +178,12 @@ byte chord_schema = 0;
 
 #define REGNOTEMODE 0
 #define ARPMODE 1
-#define SWEEPMODE 2
-#define REPEATMODE 3
-#define BEAUTYMODE 4
-#define PIANOMODE 5
-#define CHORDMODE 6
-#define CHORDSCHEMAMODE 7
+#define REPEATMODE 2
+#define BEAUTYMODE 3
+#define PIANOMODE 4
+#define CHORDMODE 5
+#define CHORDSCHEMAMODE 6
+#define SWEEPMODE 7
 // its gotta be last
 #define SETTEMPOMODE 8
 
@@ -437,7 +437,7 @@ int8_t rotary_position = 12;
 bool last_a;
 bool clockwise = false;
 long last_rotary_debounce_time = mozziMicros();
-#define ROTARY_DEBOUNCE_DELAY 8000
+#define ROTARY_DEBOUNCE_DELAY 2000
 
 long sweep_timer = mozziMicros();
 
@@ -1243,8 +1243,7 @@ void setup(){
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
 
-  // setup_envelopes(false);
-  setup_mode(PIANOMODE);
+  setup_mode(REGNOTEMODE);
 }
 
 unsigned int oneBeat(){
@@ -1529,7 +1528,7 @@ void updateControl() {
 
       if(digitalRead(ROTARY_B_PIN) != aVal){
         // Means pin A Changed first -We're RotatingClockwise.
-        if(rotary_position<128){
+        if(rotary_position+1<128){
           rotary_position++;
           pixel_counter = 5;
           // show rotary UP
@@ -1537,7 +1536,7 @@ void updateControl() {
         }
       } else {
         // Otherwise B changedfirst and we're moving CCW
-        if(rotary_position>-128){
+        if(rotary_position-1>-128){
           rotary_position--;
           pixel_counter = 3;
 
@@ -2246,8 +2245,8 @@ int updateAudio(){
 
     // if we're still holding the button, or TAILING
     if(play_continuing != STOPPED){
-      sig = (int) envelope0.next() * aSin0.next();
       notes[0]->update_envelope();
+      sig = (int) envelope0.next() * ( aSin0.next() >> 1);
     }
   } else if(mode != SETTEMPOMODE) {
     // dont play notes during temmpomode
@@ -2282,7 +2281,7 @@ int updateAudio(){
       } else if(mode == CHORDMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) ( notes[i]->env_next() * ( next_sample >> 2 )  );
+        sig += (int) ( notes[i]->env_next() * ( ( next_sample * (1/i+1) ) >> 2 )  );
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.89)  );
       } else if(mode == CHORDSCHEMAMODE){
 
