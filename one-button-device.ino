@@ -1258,8 +1258,8 @@ void setup(){
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
 
-  // INITIAL MODE FOOL
-  setup_mode(CHORDSCHEMAMODE);
+  // INITIAL MODEFOOL
+  setup_mode(REPEATMODE);
 }
 
 unsigned int oneBeat(){
@@ -1657,7 +1657,7 @@ void updateControl() {
           // do regular note off if button not held for this note
           notes[i]->note_off();
           displayPlayNotes[i] = false;
-          note_delays[i]->start( oneBeat() * 8 );
+          note_delays[i]->start( oneBeat() * 32 );
           // notes[i]->set_available(false);
         } else if(note_delays[i]->ready()){
 
@@ -1826,14 +1826,14 @@ void showPlay(){
     } else {
 
       // if it aint playin, fade it down
-      safeFadePixel(pixcolorindex, 5);
-      safeFadePixel(pixcolorindex+1, 5);
-      safeFadePixel(pixcolorindex+2, 5);
+      // safeFadePixel(pixcolorindex, 5);
+      // safeFadePixel(pixcolorindex+1, 5);
+      // safeFadePixel(pixcolorindex+2, 5);
 
       // if it aint playin, shut it off
-      // pixel_colors[pixcolorindex] = 0;
-      // pixel_colors[pixcolorindex+1] = 0;
-      // pixel_colors[pixcolorindex+2] = 0;
+      pixel_colors[pixcolorindex] = 0;
+      pixel_colors[pixcolorindex+1] = 0;
+      pixel_colors[pixcolorindex+2] = 0;
     }
   }
 
@@ -1855,7 +1855,7 @@ void showPlay(){
           pixel_colors[i] = pixel_colors[i] - decrement;
         } else {
           pixel_colors[i] = 0;
-        }
+        } 
       }      
     }
   }
@@ -1880,15 +1880,19 @@ void displayPlayNote(byte note_index){
   // Serial.print(F("Setting pix at "));
   // Serial.println(pixcolorindex);
 
-  pixel_colors[pixcolorindex] = rand() % 64;
-  pixel_colors[pixcolorindex+1] = rand() % 32;
-  pixel_colors[pixcolorindex+2] = rand() % 128;
+  // pixel_colors[pixcolorindex] = rand() % 64;
+  // pixel_colors[pixcolorindex+1] = rand() % 32;
+  // pixel_colors[pixcolorindex+2] = rand() % 128;
+  pixel_colors[pixcolorindex] = mode * 12;
+  pixel_colors[pixcolorindex+1] = 64 / mode;
+  pixel_colors[pixcolorindex+2] = 128 - (mode * 12);
 
   for(byte i=4; i<NUMPIXELS; i++){
     // if its notes playin, turn on the meter lgiths
-    pixel_colors[i*3] = 60;
-    pixel_colors[i*3+1] = 40;
-    pixel_colors[i*3+2] = 255;
+    // depending on mode, different meter light color
+    pixel_colors[i*3] = (mode * 8);
+    pixel_colors[i*3+1] = 0;
+    pixel_colors[i*3+2] = 255 - mode * 24;
   }
 }
 
@@ -2361,14 +2365,12 @@ int updateAudio(){
       } else if(mode == CHORDSCHEMAMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) notes[i]->env_next() * ( (next_sample * (1/i+3) ) >> 2);
+        sig += (int) notes[i]->env_next() * ( (next_sample * (1/i+1) ) >> 2);
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i^2) * 0.89)  );
       } else if(mode == BEAUTYMODE){
 
         // yikes
         sig += notes[i]->env_next() * ( ( next_sample * (1/i+1) ) >> 2);
-
-
         // if(qa_delay.ready()){
         //   // Serial.println(sig/256);
         //   Serial.print(F("I added "));
@@ -2377,7 +2379,6 @@ int updateAudio(){
         //   qa_delay.start(1000);
         // }
 
-        // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.48)  );
       } else if(mode == PIANOMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
