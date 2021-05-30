@@ -182,13 +182,14 @@ byte chord_schema = 0;
 #define REPEATMODE 3
 #define BEAUTYMODE 4
 #define PIANOMODE 5
+#define CHORDMODE 6
+#define CHORDSCHEMAMODE 7
 // its gotta be last
-#define SETTEMPOMODE 6
+#define SETTEMPOMODE 8
 
-#define CHORDMODE -2
-#define CHORDSCHEMAMODE -5
+#define WEIRDMODE -8
 
-#define WEIRDMODE -10
+
 
 // set via setup_mode in setup()
 int8_t mode = REGNOTEMODE;
@@ -392,6 +393,8 @@ Note note0 = Note(0, 0);
 Note note1 = Note(1, 0);
 Note note2 = Note(2, 0);
 Note note3 = Note(3, 0);
+
+EventDelay qa_delay = EventDelay();
 
 byte arp_note_index = 0;
 // this is for timing out arp notes
@@ -750,15 +753,19 @@ void handle_note_button(){
           setRepeatNote(note);
 
         } else if(mode == BEAUTYMODE){
+          // kind of violinish
           // next note is C3 offset by current rotary value!
 
           // play overtones fool
           Serial.print(F("trying hard to play beauty... "));
-          Serial.println(getNoteTime(envelope_mode));
-          play_note(72 + rotary_position, getNoteTime(envelope_mode), 0);
-          play_note(84 + rotary_position, getNoteTime(envelope_mode), 1);
-          play_note(96 + rotary_position, getNoteTime(envelope_mode), 2);
-          play_note(96 + rotary_position, getNoteTime(envelope_mode), 3);
+          // for(byte i=0; i<4; i++){
+          //   notes[i]->note_off();
+          // }
+
+          play_note(72 + rotary_position, 0, 0);
+          play_note(84 + rotary_position, 0, 1);
+          play_note(96 + rotary_position, 0, 2);
+          play_note(103 + rotary_position, 0, 3);
         } else if(mode == PIANOMODE){
           // next note is C3 offset by current rotary value!
 
@@ -818,6 +825,14 @@ void handle_note_button(){
         } else if(mode == SWEEPMODE){
 
           stop_play_sweep();
+        } else if(mode == BEAUTYMODE || mode == PIANOMODE){
+
+          for(byte i=0; i<4; i++){
+            // start noteoffs because button was released
+            notes[i]->note_off();
+            note_delays[i]->start( getReleaseTime(envelope_mode) );
+            displayPlayNotes[i] = false;
+          }
         }
 
         play_continuing = TAILING;
@@ -1229,7 +1244,7 @@ void setup(){
   note_delays[3] = &event_delay3;
 
   // setup_envelopes(false);
-  setup_mode(REGNOTEMODE);
+  setup_mode(PIANOMODE);
 }
 
 unsigned int oneBeat(){
@@ -1240,6 +1255,14 @@ unsigned int getReleaseTime(byte env_mode){
   if(env_mode == SHORT_ENV){
     return oneBeat() / 16;
   } else if(env_mode == LONG_ENV){
+    return oneBeat() / 4;
+  } else if(env_mode == BEAUTY_SHORT_ENV){
+    return oneBeat() / 16;
+  } else if(env_mode == BEAUTY_LONG_ENV){
+    return oneBeat() / 4;
+  } else if(env_mode == PIANO_SHORT_ENV){
+    return oneBeat() / 16;
+  } else if(env_mode == PIANO_LONG_ENV){
     return oneBeat() / 4;
   }
 }
@@ -1422,7 +1445,7 @@ void setup_mode(byte newmode){
     envelope_mode = short_env_enabled() ? BEAUTY_SHORT_ENV : BEAUTY_LONG_ENV;
 
     for(byte i=0; i<4; i++){
-      notes[i]->note_off(); 
+      notes[i]->note_off();
     }
   } else if(mode == PIANOMODE){
     envelope_mode = short_env_enabled() ? PIANO_SHORT_ENV : PIANO_LONG_ENV;
@@ -1647,12 +1670,13 @@ void updateControl() {
         }
       }
     } else if(mode == BEAUTYMODE || mode == PIANOMODE){
-      if(!button_state){
-        // if note0 playing but button not held anymore
-        notes[i]->note_off();
-        note_delays[i]->start(getReleaseTime(envelope_mode));
-        displayPlayNotes[i] = false;
-      }
+      // fuck!
+
+          if(!notes[i]->is_available() && note_delays[i]->ready()){
+            // Serial.print(i);
+            // Serial.println(F("Was ready!"));
+            notes[i]->set_available(true);
+          }
     }
 
     // shut off after we waited for the release
@@ -2248,7 +2272,7 @@ int updateAudio(){
       if(mode == REGNOTEMODE || mode == ARPMODE || mode == REPEATMODE){
         // if( notes[i]->is_playing() ){
         // }
-          sig += ( notes[i]->env_next() * lpf.next( next_sample ) );
+          sig += ( notes[i]->env_next() * (next_sample >> 2) );
         // sig += ( notes[i]->env_next() * next_sample );
 
       // } else if(mode == ARPMODE){
@@ -2258,22 +2282,32 @@ int updateAudio(){
       } else if(mode == CHORDMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i+1) )  );
+        sig += (int) ( notes[i]->env_next() * ( next_sample >> 2 )  );
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.89)  );
       } else if(mode == CHORDSCHEMAMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i^2) )  );
+        sig += (int) notes[i]->env_next() * (next_sample >> 2);
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i^2) * 0.89)  );
       } else if(mode == BEAUTYMODE){
 
-        // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) );
+        // yikes
+        sig += notes[i]->env_next() * (next_sample >> 2);
+
+
+        // if(qa_delay.ready()){
+        //   // Serial.println(sig/256);
+        //   Serial.print(F("I added "));
+        //   Serial.println(val);
+        //   Serial.println(sig);
+        //   qa_delay.start(1000);
+        // }
+
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.48)  );
       } else if(mode == PIANOMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) ( notes[i]->env_next() * lpf.next( next_sample ) * (1/(i+1) )  );
+        sig += notes[i]->env_next() * (next_sample >> 2);
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.68)  );
         // sig += (int) ( notes[i]->env_next() );
       }
@@ -2282,7 +2316,7 @@ int updateAudio(){
 
   // dry will just be passed along if not enabled
   sig = render_effects(sig);
-  return (int) sig>>8;
+  return (int) lpf.next ( sig>>8 );
 }
 
 void loop(){
