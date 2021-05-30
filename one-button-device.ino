@@ -61,6 +61,7 @@ Cancel button?
 #define ROTATE 6
 #define SHOWROTARY 7
 #define SHOWTEMPO 8
+#define SHOWCHORDSCHEMA 9
 
 unsigned long pixel_timer = mozziMicros();
 unsigned long display_idle_timer = mozziMicros();
@@ -71,9 +72,12 @@ unsigned long display_aux_timer = mozziMicros();
 Adafruit_NeoPixel pixel(NUMPIXELS, PIXELPIN, NEO_GRB + NEO_KHZ800);
 // r,g,b,r,g,b... NUMPIX * 3
 byte pixel_colors[21];
+
+// coolmode
 // byte from_pixel_colors[21];
 // byte dest_pixel_colors[21];
 // uint8_t pixel_lerp_steps[7];
+
 byte display_mode;
 byte pixel_counter = 0;
 byte pixel_counter2 = 0;
@@ -173,7 +177,7 @@ float slope = 0;
 
 int8_t current_note = 0;
 
-// this is actually disabled right now
+// select which chord schema
 byte chord_schema = 0;
 
 #define REGNOTEMODE 0
@@ -596,7 +600,12 @@ void handle_rotary_button(){
 
   long now = mozziMicros();
   if((now - last_rbdebounce_time) > RBDEBOUNCE_DELAY){
+
+    // doing stuff after debounce
+
     if(readin != rbstate){
+
+      // rb reading actually changed
 
       // Serial.println(F("Got Redin"));
       rbstate = readin;
@@ -612,30 +621,36 @@ void handle_rotary_button(){
           Serial.println(F("Set hold timer."));
         } else {
           // button released
-          if(lastMode<0 && mode != SETTEMPOMODE && !rb_block_mode_increment){
-            mode++;
-            if(mode == SETTEMPOMODE){
-              mode = 0;
+
+          if(button_state && mode == CHORDSCHEMAMODE){
+
+            // if big button is held, and its chordschema, use rb to increment chordschema
+            Serial.println(F("I incremented chordschema "));
+            chord_schema++;
+            if(chord_schema > 6){
+              chord_schema = 0;
             }
-            setup_mode(mode);
-            Serial.print(F("I incremented MODE to "));
-            Serial.println(mode);  
+            setDisplayMode(SHOWCHORDSCHEMA);
+
+          } else {
+            // otherwise, increment mode normally
+
+            if(lastMode<0 && mode != SETTEMPOMODE && !rb_block_mode_increment){
+              mode++;
+              if(mode == SETTEMPOMODE){
+                mode = 0;
+              }
+              setup_mode(mode);
+              Serial.print(F("I incremented MODE to "));
+              Serial.println(mode);  
+            }
+
+            // released button from hold, dont block mode hcange anymore
+            rb_block_mode_increment = false;
+
           }
 
-          // released button from hold, dont block mode hcange anymore
-          rb_block_mode_increment = false;
         }
-
-
-        // Serial.println("I incremented chordschema");
-        // chord_schema++;
-        // rb_timer = now;
-        // if(chord_schema > 6){
-        //   chord_schema = 0;
-        // }
-
-
-        // doing stuff after debounce
 
       }
     }
@@ -1243,7 +1258,8 @@ void setup(){
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
 
-  setup_mode(REGNOTEMODE);
+  // INITIAL MODE FOOL
+  setup_mode(CHORDSCHEMAMODE);
 }
 
 unsigned int oneBeat(){
@@ -1492,8 +1508,11 @@ void setDisplayMode(byte dispMode){
   } else if(dispMode == SHOWROTARY){
     zeroOutDisplay = true;
     Serial.println(F("I started showrotarymode"));
-
+  } else if(dispMode == SHOWCHORDSCHEMA){
+    zeroOutDisplay = true;
+    Serial.println(F("I started showchordschemamode"));
   }
+
   if(zeroOutDisplay){
     for(byte i=0; i<21; i++){
       pixel_colors[i] = 0;
@@ -1563,12 +1582,13 @@ void updateControl() {
   handle_rotary_button();
   // check if note buttons down/ready for action -> if so, play note!
   handle_note_button();
-  // just set em into toggles[]
+  // this just sets em into toggles[]
   set_effects();
 
   bool this_env_toggle = short_env_enabled();
   if(last_env_toggle != this_env_toggle){
     // when env length switch gets changed
+
     if(mode == BEAUTYMODE){
       // each env has its own setting
       envelope_mode = this_env_toggle ? BEAUTY_SHORT_ENV : BEAUTY_LONG_ENV;
@@ -1637,7 +1657,7 @@ void updateControl() {
           // do regular note off if button not held for this note
           notes[i]->note_off();
           displayPlayNotes[i] = false;
-          note_delays[i]->start(800);
+          note_delays[i]->start( oneBeat() * 8 );
           // notes[i]->set_available(false);
         } else if(note_delays[i]->ready()){
 
@@ -1728,6 +1748,8 @@ void handleDisplay(){
     showTempo();
   } else if(display_mode == SHOWROTARY){
     showRotary();
+  } else if(display_mode == SHOWCHORDSCHEMA){
+    showChordSchema();
   }
 
   if(!button_state && display_mode != IDLE && mode != SETTEMPOMODE && mozziMicros() - display_idle_timer >= 3000000){
@@ -1769,7 +1791,7 @@ bool inRange(byte low, byte high, byte value){
 }
 
 bool colorCloseEnough(byte color, byte destColor){
-  return inRange(destColor, destColor, color);
+  return inRange(destColor-4, destColor+4, color);
 }
 
 void showWeird(){
@@ -1792,6 +1814,8 @@ void showWeird(){
 }
 
 void showPlay(){
+  // just the meter, 
+
   // well hi
   byte pixcolorindex;
   bool someonePlayin = false;
@@ -1800,10 +1824,16 @@ void showPlay(){
     if(displayPlayNotes[i]){
       someonePlayin = true;
     } else {
+
+      // if it aint playin, fade it down
+      safeFadePixel(pixcolorindex, 5);
+      safeFadePixel(pixcolorindex+1, 5);
+      safeFadePixel(pixcolorindex+2, 5);
+
       // if it aint playin, shut it off
-      pixel_colors[pixcolorindex] = 0;
-      pixel_colors[pixcolorindex+1] = 0;
-      pixel_colors[pixcolorindex+2] = 0;
+      // pixel_colors[pixcolorindex] = 0;
+      // pixel_colors[pixcolorindex+1] = 0;
+      // pixel_colors[pixcolorindex+2] = 0;
     }
   }
 
@@ -1831,6 +1861,14 @@ void showPlay(){
   }
 }
 
+void safeFadePixel(byte pixIndex, byte decrement){
+  if(pixel_colors[pixIndex] - decrement > 0){
+    pixel_colors[pixIndex] -= decrement;
+  } else {
+    pixel_colors[pixIndex] = 0;
+  }
+}
+
 void displayPlayNote(byte note_index){
   // well hi
   byte pixcolorindex = note_index * 3;
@@ -1848,9 +1886,9 @@ void displayPlayNote(byte note_index){
 
   for(byte i=4; i<NUMPIXELS; i++){
     // if its notes playin, turn on the meter lgiths
-    pixel_colors[i*3] = 180 - mode * 16;
-    pixel_colors[i*3+1] = mode * 16;
-    pixel_colors[i*3+2] = 255 - mode / 7;
+    pixel_colors[i*3] = 60;
+    pixel_colors[i*3+1] = 40;
+    pixel_colors[i*3+2] = 255;
   }
 }
 
@@ -2021,8 +2059,26 @@ void showIdle(){
   }
 }
 
+void showChordSchema(){
+  for(byte i=0; i<NUMPIXELS; i++){
+
+    if(i <= chord_schema){
+      // red for chordschema count
+      pixel_colors[i*3] = 200;
+      pixel_colors[i*3+1] = 0;
+      pixel_colors[i*3+2] = 0;
+    } else {
+      // otherwise background color
+      pixel_colors[i*3] = 0;
+      pixel_colors[i*3+1] = 36;
+      pixel_colors[i*3+2] = 24;
+    }
+
+  }
+}
+
 void showCool(){
-  // check if we arrived at dest colors
+  // // check if we arrived at dest colors
   // for(byte i=0; i<21; i++){
   //   if(pixel_colors[i] == dest_pixel_colors[i]){
   //     dest_pixel_colors[i] = rand() % 10;
@@ -2039,45 +2095,64 @@ void showCool(){
   //   pixcolorindex = i * 3;
   //   byte compoindex;
 
-  //   if( colorCloseEnough(pixel_colors[pixcolorindex], dest_pixel_colors[pixcolorindex]) && colorCloseEnough(pixel_colors[pixcolorindex+1], dest_pixel_colors[pixcolorindex+1]) && colorCloseEnough(pixel_colors[pixcolorindex+2], dest_pixel_colors[pixcolorindex+2]) ){
+  //   if(pixel_counter == i){
+  //     // allowed to get reassigned
+  //     if( colorCloseEnough(pixel_colors[pixcolorindex], dest_pixel_colors[pixcolorindex]) && colorCloseEnough(pixel_colors[pixcolorindex+1], dest_pixel_colors[pixcolorindex+1]) && colorCloseEnough(pixel_colors[pixcolorindex+2], dest_pixel_colors[pixcolorindex+2]) ){
 
-  //     // Serial.print("I set new color for ");
-  //     // Serial.println(pixcolorindex);
+  //       // Serial.print("I set new color for ");
+  //       // Serial.println(pixcolorindex);
 
-  //     // if we reached the rgb desgination for this pixel
-  //     // preserve dest color as from color so we can fade propaly
-  //     from_pixel_colors[pixcolorindex] = dest_pixel_colors[pixcolorindex];
-  //     dest_pixel_colors[pixcolorindex] = 0;
-  //     // dest_pixel_colors[pixcolorindex] = rand() % 100;
-  //     pixel_lerp_steps[pixcolorindex] = 0;
+  //       // if we reached the rgb desgination for this pixel
+  //       // preserve dest color as from color so we can fade propaly
+  //       from_pixel_colors[pixcolorindex] = dest_pixel_colors[pixcolorindex];
+  //       // dest_pixel_colors[pixcolorindex] = 0;
+  //       dest_pixel_colors[pixcolorindex] = rand() % 255;
+  //       pixel_lerp_steps[pixcolorindex] = 0;
 
-  //     from_pixel_colors[pixcolorindex+1] = dest_pixel_colors[pixcolorindex+1];
-  //     dest_pixel_colors[pixcolorindex+1] = 0;
-  //     // dest_pixel_colors[pixcolorindex+1] = rand() % 25;
-  //     pixel_lerp_steps[pixcolorindex+1] = 0;
+  //       from_pixel_colors[pixcolorindex+1] = dest_pixel_colors[pixcolorindex+1];
+  //       // dest_pixel_colors[pixcolorindex+1] = 0;
+  //       dest_pixel_colors[pixcolorindex+1] = rand() % 255;
+  //       pixel_lerp_steps[pixcolorindex+1] = 0;
 
-  //     from_pixel_colors[pixcolorindex+2] = dest_pixel_colors[pixcolorindex+2];
-  //     dest_pixel_colors[pixcolorindex+2] = rand() % 150;
-  //     pixel_lerp_steps[pixcolorindex+2] = 0;
+  //       from_pixel_colors[pixcolorindex+2] = dest_pixel_colors[pixcolorindex+2];
+  //       dest_pixel_colors[pixcolorindex+2] = rand() % 255;
+  //       pixel_lerp_steps[pixcolorindex+2] = 0;
 
-  //     // Serial.print("The new destination is.. ");
-  //     // Serial.print(dest_pixel_colors[pixcolorindex]);
-  //     // Serial.print(" ");
-  //     // Serial.print(dest_pixel_colors[pixcolorindex+1]);
-  //     // Serial.print(" ");
-  //     // Serial.print(dest_pixel_colors[pixcolorindex+2]);
-  //   } else {
-  //     for(byte x=0; x<3; x++){
-  //       // loop through r,g,b for each pixel
-  //       compoindex = pixcolorindex+x;
-  //       // track u as byte, turn into float here -> only 7 so same u steps for each whole rgb
-  //       pixel_colors[compoindex] = lerp(pixel_colors[compoindex], dest_pixel_colors[compoindex], pixel_lerp_steps[ pixcolorindex ] );
+  //       // Serial.print("The new destination is.. ");
+  //       // Serial.print(dest_pixel_colors[pixcolorindex]);
+  //       // Serial.print(" ");
+  //       // Serial.print(dest_pixel_colors[pixcolorindex+1]);
+  //       // Serial.print(" ");
+  //       // Serial.print(dest_pixel_colors[pixcolorindex+2]);
   //     }
+  //   } else {
+    
+  //     // otherwise just keep fadin
+  //     if( !(colorCloseEnough(pixel_colors[pixcolorindex], dest_pixel_colors[pixcolorindex]) && colorCloseEnough(pixel_colors[pixcolorindex+1], dest_pixel_colors[pixcolorindex+1]) && colorCloseEnough(pixel_colors[pixcolorindex+2], dest_pixel_colors[pixcolorindex+2])) ){
 
-  //     pixel_lerp_steps[ pixcolorindex ] += 1;
+  //       for(byte x=0; x<3; x++){
+  //         // loop through r,g,b for each pixel
+  //         compoindex = pixcolorindex+x;
+  //         // track u as byte, turn into float here -> only 7 so same u steps for each whole rgb
+  //         pixel_colors[compoindex] = lerp(pixel_colors[compoindex], dest_pixel_colors[compoindex], pixel_lerp_steps[ pixcolorindex ] );
+  //       }
+
+  //       pixel_lerp_steps[ pixcolorindex ] += 1;
+  //     }
+      
   //   }
-
   // }
+
+  // unsigned long now = mozziMicros();
+  // if(now - display_aux_timer > 10000000){
+  //   // increment which pixel can be recolored
+  //   pixel_counter++;
+  //   if(pixel_counter==NUMPIXELS){
+  //     pixel_counter = 0;
+  //   }
+  //   display_aux_timer = now;
+  // }
+
 }
 
 byte lerp(byte a, byte b, uint8_t u){
@@ -2286,12 +2361,12 @@ int updateAudio(){
       } else if(mode == CHORDSCHEMAMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += (int) notes[i]->env_next() * (next_sample >> 2);
+        sig += (int) notes[i]->env_next() * ( (next_sample * (1/i+3) ) >> 2);
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i^2) * 0.89)  );
       } else if(mode == BEAUTYMODE){
 
         // yikes
-        sig += notes[i]->env_next() * (next_sample >> 2);
+        sig += notes[i]->env_next() * ( ( next_sample * (1/i+1) ) >> 2);
 
 
         // if(qa_delay.ready()){
@@ -2306,7 +2381,7 @@ int updateAudio(){
       } else if(mode == PIANOMODE){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
-        sig += notes[i]->env_next() * (next_sample >> 2);
+        sig += notes[i]->env_next() * ( ( next_sample * (1/i+1) ) >> 2);
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.68)  );
         // sig += (int) ( notes[i]->env_next() );
       }
