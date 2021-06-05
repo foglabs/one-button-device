@@ -209,6 +209,7 @@ int8_t lastMode = -1;
 
 
 #define BIGBUTTONPIN 2
+#define BIGBUTTON_LED_PIN 10
 
 #define TOGGLE_0_PIN 3
 #define TOGGLE_1_PIN 4
@@ -218,6 +219,7 @@ int8_t lastMode = -1;
 #define ROTARY_A_PIN 11
 #define ROTARY_B_PIN 12
 #define ROTARY_BUTTON_PIN 8
+
 
 // this class wraps oscillators, when they're intended to be used for notes
 // need to make sure resetting them works, causes weird mode will probably bypass this
@@ -429,6 +431,8 @@ bool last_button_state = false;
 long last_debounce_time = mozziMicros();
 // 10ms
 #define DEBOUNCE_DELAY 10000
+byte bigButtonBrightness = 0;
+unsigned long buttonMeterTimer = mozziMicros();
 
 // rotary button
 bool rbstate = false;
@@ -1856,7 +1860,7 @@ void handleDisplay(){
   }
 }
 
-void writeDisplay(){  
+void writeDisplay(){
 // set neopixel
   unsigned long now = mozziMicros();
   if(now - pixel_timer >= PIXDELAY){
@@ -1879,11 +1883,20 @@ void writeDisplay(){
 
       pixel.show();
     }
+
+    // use the pix timer to write to the button as well
+    handleArcadeButton();
+
     pixel_timer = now;
   }
 }
 
+void handleArcadeButton(){
+  analogWrite(BIGBUTTON_LED_PIN, bigButtonBrightness);
+}
+
 bool inRange(byte low, byte high, byte value){
+  // dont page me
   return low <= value && value <= high;
 }
 
@@ -2071,7 +2084,7 @@ void showFilter(){
 
 void showVol(){
    for(byte i=1; i<NUMPIXELS; i++){
-    if( i < floor( (float) volume/65535 * 6 ) ){
+    if( i < floor( (float) volume/65535 * 8 ) ){
       // show pix proportional to vol oom
       pixel_colors[i*3] = 80;
       pixel_colors[i*3+1] = 10;
@@ -2365,117 +2378,122 @@ int updateAudio(){
   // -if wait complete, play buffer
 
   // get vals from all playing notes
-  if(mode == WEIRDMODE){
+
+  // maybe for later
+  // if(mode == WEIRDMODE){
     
-    // keep on playin
-    if(play_continuing != STOPPED){
-      // play while I'm holdin that button
-      sig = aSin0.next() * envelope0.next();
+  //   // keep on playin
+  //   if(play_continuing != STOPPED){
+  //     // play while I'm holdin that button
+  //     sig = aSin0.next() * envelope0.next();
 
-      // fill buffer
-      // take a sample every 128 steps... eww!
-      if(buffstepcount == 0){
+  //     // fill buffer
+  //     // take a sample every 128 steps... eww!
+  //     if(buffstepcount == 0){
 
-        // Serial.print("SetBUFFERE ");
-        // Serial.println((int)buffer[buffcount]);
-        buffcount++;
+  //       // Serial.print("SetBUFFERE ");
+  //       // Serial.println((int)buffer[buffcount]);
+  //       buffcount++;
 
-        // there is officially *something* in the buffer
-        buffer_empty = false;
+  //       // there is officially *something* in the buffer
+  //       buffer_empty = false;
 
-        // only TAKE a sample once every 256
-        // buffer[buffcount] = (char) sig/2.0;
+  //       // only TAKE a sample once every 256
+  //       // buffer[buffcount] = (char) sig/2.0;
 
-        // map int (sig) onto char datatype
-        Serial.print(F("Set buffer, fuckface to "));
-        Serial.println( sig );
+  //       // map int (sig) onto char datatype
+  //       Serial.print(F("Set buffer, fuckface to "));
+  //       Serial.println( sig );
 
-        buffer[buffcount] = sig/32767 * 128;
+  //       buffer[buffcount] = sig/32767 * 128;
 
-        // fill up lights as we fill buffer
-        if(buffer_amount < BUFFER_LENGTH){
-          buffer_amount += 2;
-          if(buffer_amount>BUFFER_LENGTH){
-            buffer_amount=BUFFER_LENGTH;
-          }
-        }
+  //       // fill up lights as we fill buffer
+  //       if(buffer_amount < BUFFER_LENGTH){
+  //         buffer_amount += 2;
+  //         if(buffer_amount>BUFFER_LENGTH){
+  //           buffer_amount=BUFFER_LENGTH;
+  //         }
+  //       }
 
-      }
+  //     }
 
-      buffstepcount++;
-      // count up until its time to take another sample
-      if(buffstepcount == BUFFSTEP_LENGTH){
-        buffstepcount = 0;
-      }
+  //     buffstepcount++;
+  //     // count up until its time to take another sample
+  //     if(buffstepcount == BUFFSTEP_LENGTH){
+  //       buffstepcount = 0;
+  //     }
   
-      // restart filling buffer if still holding button
-      if(buffcount == BUFFER_LENGTH){
-        buffcount = 0;
-        buffstepcount = 0;
-      }
-    }
+  //     // restart filling buffer if still holding button
+  //     if(buffcount == BUFFER_LENGTH){
+  //       buffcount = 0;
+  //       buffstepcount = 0;
+  //     }
+  //   }
 
-    // i am not holding the button, there is buffer, and we waited for buffdelay
-    if(play_continuing == STOPPED && !buffer_empty && buffdelay.ready()) {
+  //   // i am not holding the button, there is buffer, and we waited for buffdelay
+  //   if(play_continuing == STOPPED && !buffer_empty && buffdelay.ready()) {
 
-      // Serial.print("I went to play my buffertown at buffcount ");
-      // Serial.println(buffcount);
-      if(buffcount < BUFFER_LENGTH){
-        // play back from buffer
-        // Serial.print("PLAYINGBCKS ");
-        // Serial.println(buffer[buffcount]);
+  //     // Serial.print("I went to play my buffertown at buffcount ");
+  //     // Serial.println(buffcount);
+  //     if(buffcount < BUFFER_LENGTH){
+  //       // play back from buffer
+  //       // Serial.print("PLAYINGBCKS ");
+  //       // Serial.println(buffer[buffcount]);
 
-        // map char buffer sample onto int type range
-        int this_sig = buffer[buffcount]/128.0 * 32767;
-        // y = mx + b
-        sig = (int) (slope * buffstepcount + this_sig);
-        // attenuate siga little
-        // sig = (int) (slope * buffstepcount + this_sig) * 0.36;
+  //       // map char buffer sample onto int type range
+  //       int this_sig = buffer[buffcount]/128.0 * 32767;
+  //       // y = mx + b
+  //       sig = (int) (slope * buffstepcount + this_sig);
+  //       // attenuate siga little
+  //       // sig = (int) (slope * buffstepcount + this_sig) * 0.36;
 
-        // only switch to the next sample once we've arrived there
-        if(buffstepcount == 0){
-          buffcount++;
+  //       // only switch to the next sample once we've arrived there
+  //       if(buffstepcount == 0){
+  //         buffcount++;
 
-          // y2 is next amp, y1 is this amp
-          // xs are where we are within this bufferstep
-          int next_sig = (int) buffer[buffcount + 1];
+  //         // y2 is next amp, y1 is this amp
+  //         // xs are where we are within this bufferstep
+  //         int next_sig = (int) buffer[buffcount + 1];
 
-          // set next slope
-          slope = get_slope(next_sig, this_sig, 63, 0);
-        }
+  //         // set next slope
+  //         slope = get_slope(next_sig, this_sig, 63, 0);
+  //       }
 
-        buffstepcount++;
-        if(buffstepcount == BUFFSTEP_LENGTH){
-          buffstepcount = 0;
-        }
+  //       buffstepcount++;
+  //       if(buffstepcount == BUFFSTEP_LENGTH){
+  //         buffstepcount = 0;
+  //       }
 
-        // Serial.print("Played from buffer ");
-        // Serial.println(sig);
-      } else {
-        // Serial.println("Finished Playing Buffer");
-        // stop all that downloadin
-        // we are actually done with the buffer
-        buffcount = 0;
-        buffstepcount = 0;
+  //       // Serial.print("Played from buffer ");
+  //       // Serial.println(sig);
+  //     } else {
+  //       // Serial.println("Finished Playing Buffer");
+  //       // stop all that downloadin
+  //       // we are actually done with the buffer
+  //       buffcount = 0;
+  //       buffstepcount = 0;
 
-        bufferreplay++;
-        if(bufferreplay == 2){
-          // stop repeating buffer playback after 5
-          bufferreplay = 0;
-          buffer_empty = true;
-        }
-      }
+  //       bufferreplay++;
+  //       if(bufferreplay == 2){
+  //         // stop repeating buffer playback after 5
+  //         bufferreplay = 0;
+  //         buffer_empty = true;
+  //       }
+  //     }
 
-      if(buffer_amount > 0 && buffer_amount > 4){
-        // we finsihed using  a buffer sample, drain out (for lights), only on last repeat
-        // Serial.print(F("Sink buffer amt "));
-        // Serial.println(buffer_amount);
-        buffer_amount -= 4;
-      }
-    }
+  //     if(buffer_amount > 0 && buffer_amount > 4){
+  //       // we finsihed using  a buffer sample, drain out (for lights), only on last repeat
+  //       // Serial.print(F("Sink buffer amt "));
+  //       // Serial.println(buffer_amount);
+  //       buffer_amount -= 4;
+  //     }
+  //   }
     
-    sig = envelope0.next() * sig;
-  } else if(mode == SWEEPMODE){
+  //   sig = envelope0.next() * sig;
+  // } else 
+
+
+  if(mode == SWEEPMODE){
 
     // if we're still holding the button, or TAILING
     if(play_continuing != STOPPED){
@@ -2550,6 +2568,12 @@ int updateAudio(){
   sig = render_effects(sig);
   // set volume
   sig = (int) sig * ( (float) volume/65535 );
+
+  if(mozziMicros() - buttonMeterTimer > 320000){
+    bigButtonBrightness = abs(sig);
+    buttonMeterTimer = mozziMicros();
+  }
+
   return (int) lpf.next ( sig>>8 );
 }
 
