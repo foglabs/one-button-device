@@ -9,7 +9,7 @@ measurements
 
 audio hole
   27mm( or whatev) from corner
-  22mm from top edge
+  14mm from top edge
 
 display hole
   24mm hole
@@ -20,7 +20,11 @@ display hole
 arcade hole
   24mm hole
 
-  32mm fr long edge
+  XXX32mm fr long edge
+    TOO CLOSE to display shield
+
+  25mm fr long edge
+
   35mm fr short edge
 
 rotary
@@ -41,8 +45,8 @@ rotary
     16mm,
     32mm,
     48mm from short edge
-    32mm from long edge
-
+    XXX32mm from long edge
+      will be 25mm due to arcade move
 
 
 
@@ -171,6 +175,36 @@ major code spots
 
 
 maybe do counter of how many semitones when knob up or down
+
+need to
+  adjust lpf
+  adjust volume
+
+selecting lpf option (yellow) works once, then not again
+
+
+
+hold to enter SELECTOPTIONMODE
+  r b y ring, select menu
+  go into tempomode
+  go into filtermode
+  etc
+
+
+
+
+build list
+24mm arcade button
+3 10mm red latching buttons
+1 adafruit rotary
+1 small abs box
+1 neopixel jewel (RGB or RGBW)
+
+1 
+
+
+22awg silicone insulated wire
+
 
 
 
