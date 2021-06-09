@@ -196,16 +196,23 @@ hold to enter SELECTOPTIONMODE
 build list
 24mm arcade button
   22 ohm resistor for Arcade led
-  
 3 10mm red latching buttons
 1 adafruit rotary
 1 small abs box
 1 neopixel jewel (RGB or RGBW)
 
-1 
+6 standoffs (4 for uno)
+
+1 arduino uno
+1 quarter-sized permaproto pcb
+1 1ohm resistor
+1 10uF electrolytic capacitor
+1 1/4" audio jack
 
 
 22awg silicone insulated wire
+
+1 2.2mm 9v power supply
 
 
 

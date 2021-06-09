@@ -89,8 +89,8 @@ unsigned long display_idle_timer = mozziMicros();
 unsigned long display_aux_timer = mozziMicros();
 
 // for +white version
-// Adafruit_NeoPixel pixel(NUMPIXELS, PIXELPIN, NEO_GRBW + NEO_KHZ800);
-Adafruit_NeoPixel pixel(NUMPIXELS, PIXELPIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel pixel(NUMPIXELS, PIXELPIN, NEO_GRBW + NEO_KHZ800);
+// Adafruit_NeoPixel pixel(NUMPIXELS, PIXELPIN, NEO_GRB + NEO_KHZ800);
 // r,g,b,r,g,b... NUMPIX * 3
 byte pixel_colors[21];
 
@@ -138,7 +138,9 @@ Oscil <8192, AUDIO_RATE> aSin2(SIN8192_DATA);
 Oscil <8192, AUDIO_RATE> aSin3(SIN8192_DATA);
 
 // davibrato :D
-// Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aVibrato(COS2048_DATA);
+Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aVibrato(COS2048_DATA);
+
+// ReverbTank reverb;
 
 // use #define for CONTROL_RATE, not a constant
 #define CONTROL_RATE 256 // Hz, powers of 2 are most reliable
@@ -158,7 +160,7 @@ bool last_env_toggle = false;
 
 LowPassFilter lpf;
 byte cutoff = 196;
-unsigned int volume = 65535;
+float volume = 1.0;
 
 // for flanger
 // AudioDelay <256> aDel;
@@ -453,7 +455,7 @@ int8_t rotary_position = 12;
 bool last_a;
 bool clockwise = false;
 long last_rotary_debounce_time = mozziMicros();
-#define ROTARY_DEBOUNCE_DELAY 4000
+#define ROTARY_DEBOUNCE_DELAY 16000
 
 long sweep_timer = mozziMicros();
 
@@ -571,7 +573,7 @@ void play_arp_notes(){
 
     // uint16_t arp_time;
     // keep this, not same thing as envelope setting
-    // if(short_env_enabled()){
+    // if(short_env_disabled()){
     //   arp_time = 300;
     // } else {
     //   arp_time = 1200;
@@ -597,7 +599,7 @@ void set_weird_freq(){
 void set_sweep_freq(){
 
   // exponentially increase with rot pos
-  float sweep_freq = 523.25 + (pow(rotary_position, 2));
+  float sweep_freq = 440.0 + ( signbit(rotary_position/rotary_position) * (pow(rotary_position, 2)) );
   aSin0.setFreq(sweep_freq);
 }
 
@@ -1092,16 +1094,15 @@ bool compressor_enabled(){
   return toggles[1];
 }
 
-bool short_env_enabled(){
-  // YOOO sort this shit out when you have multiples
-  return toggles[0];
-  // return toggles[2];
+bool short_env_disabled(){
+  // reverse this so that button down is LONG_ENV
+  return !toggles[0];
 }
 
 // too big for memory :/
-// bool reverb_enabled(){
-//   return toggles[2];
-// }
+bool reverb_enabled(){
+  return toggles[2];
+}
 
 // bool waveshaper_enabled(){
 //   return toggles[1] == 1;
@@ -1109,13 +1110,12 @@ bool short_env_enabled(){
 
 bool vibrato_enabled(){
   // defined near osc_next
-  return false;
   return toggles[2];
 }
 
 void set_effects() {
   // YOOO limited to two toggles on the rough build
-  for(byte i=0; i<2; i++){
+  for(byte i=0; i<3; i++){
     // bool newtoggle =!digitalRead(i+3);
     // if(newtoggle != toggles[i]){
     //   Serial.print(i);
@@ -1125,6 +1125,10 @@ void set_effects() {
     
     // comes in backwards... (and noexistent ones are true)
     toggles[i] = !digitalRead(i+3);
+    // Serial.print("TOgg ");
+    // Serial.print(i);
+    // Serial.print(" ");
+    // Serial.println(toggles[i]);
   }
 
 }
@@ -1172,11 +1176,6 @@ int render_compressor(int signal){
   }
 }
 
-int render_reverb(int signal){
-  // return signal + reverb.next(signal);
-  return signal;
-}
-
 int render_effects(int signal) {
   // its not enabled
   // if(flanger_enabled()){
@@ -1198,7 +1197,7 @@ int render_effects(int signal) {
   }
   
   // if(reverb_enabled()){
-  //   signal = signal + render_reverb(signal);
+  //   signal = signal + ( reverb.next(signal) >> 3);
   // }
 
   return (int) signal;
@@ -1232,8 +1231,8 @@ void setup(){
   pinMode(ROTARY_BUTTON_PIN, INPUT_PULLUP);
 
   // for ada encoder, set this, doesnt have power pin
-  // pinMode(ROTARY_A_PIN, INPUT_PULLUP);
-  // pinMode(ROTARY_B_PIN, INPUT_PULLUP);
+  pinMode(ROTARY_A_PIN, INPUT_PULLUP);
+  pinMode(ROTARY_B_PIN, INPUT_PULLUP);
   
   // top left button signal
   // top right gnd
@@ -1245,7 +1244,7 @@ void setup(){
   arp_delay.start(300);
 
   // lpf currently applied to EVERYTHING, maybe dump if corrected passive filter sounds better
-  lpf.setResonance(64);
+  lpf.setResonance(16);
   // cutoff is 0-255 represnting 0-8191Hz (audiorate/2)
   lpf.setCutoffFreq(cutoff);
 
@@ -1254,7 +1253,7 @@ void setup(){
   // aPhasor1.setFreq(phase_freq);
   
   // byte vib_intensity = 255;
-  // aVibrato.setFreq(3.f);
+  aVibrato.setFreq(3.f);
 
   
   // -128 to 127
@@ -1458,7 +1457,7 @@ void setup_mode(byte newmode){
   play_continuing = STOPPED;
 
   // most modes follow short vs long env setting
-  if(short_env_enabled()){
+  if(short_env_disabled()){
     envelope_mode = SHORT_ENV;
   } else {
     envelope_mode = LONG_ENV;
@@ -1488,13 +1487,13 @@ void setup_mode(byte newmode){
     set_sweep_freq();
   } else if(mode == BEAUTYMODE){
     // yucky
-    envelope_mode = short_env_enabled() ? BEAUTY_SHORT_ENV : BEAUTY_LONG_ENV;
+    envelope_mode = short_env_disabled() ? BEAUTY_SHORT_ENV : BEAUTY_LONG_ENV;
 
     for(byte i=0; i<4; i++){
       notes[i]->note_off();
     }
   } else if(mode == PIANOMODE){
-    envelope_mode = short_env_enabled() ? PIANO_SHORT_ENV : PIANO_LONG_ENV;
+    envelope_mode = short_env_disabled() ? PIANO_SHORT_ENV : PIANO_LONG_ENV;
   } else if(mode == SETTEMPOMODE){
     // flag this down to show that we dont set tempo before recording tap 1
     tempoTapTimer = false;
@@ -1629,9 +1628,9 @@ void updateControl() {
           Serial.print(F("cutoff "));
           Serial.println(cutoff);
         } else if(mode == SETVOLMODE){
-          if( volume + 640*rp_move > 0 && volume + 640*rp_move <= 65535 ){
+          if( volume + 0.1*rp_move > 0 && volume + 0.1*rp_move <= 65535 ){
             // changed here, gets relfected in updateaudio
-            volume += 640*rp_move;
+            volume += 0.1*rp_move;
           }
 
           // bad debouncing problems...
@@ -1665,7 +1664,7 @@ void updateControl() {
   // this just sets em into toggles[]
   set_effects();
 
-  bool this_env_toggle = short_env_enabled();
+  bool this_env_toggle = short_env_disabled();
   if(last_env_toggle != this_env_toggle){
     // when env length switch gets changed
 
@@ -1862,8 +1861,8 @@ void handleDisplay(){
 
 void writeDisplay(){
 // set neopixel
-  unsigned long now = mozziMicros();
-  if(now - pixel_timer >= PIXDELAY){
+  // unsigned long now = mozziMicros();
+  // if(now - pixel_timer >= PIXDELAY){
     handleDisplay();
 
     pixel.clear();
@@ -1887,8 +1886,8 @@ void writeDisplay(){
     // use the pix timer to write to the button as well
     handleArcadeButton();
 
-    pixel_timer = now;
-  }
+    // pixel_timer = now;
+  // }
 }
 
 void handleArcadeButton(){
@@ -2509,14 +2508,14 @@ int updateAudio(){
       notes[i]->update_envelope();
 
       int next_sample = notes[i]->osc_next();
-      // if(vibrato_enabled()){
-      //   // intensity value * phase offset value
-      //   // Serial.println("Vibrato active...");
-      //   Q15n16 vibrato = (Q15n16) 160 * aVibrato.next();
-      //   next_sample = notes[i]->osc_phmod_next(vibrato);
-      // } else {
-      //   next_sample = notes[i]->osc_next();
-      // }
+      if(vibrato_enabled()){
+        // intensity value * phase offset value
+        // Serial.println("Vibrato active...");
+        Q15n16 vibrato = (Q15n16) 160 * aVibrato.next();
+        next_sample = notes[i]->osc_phmod_next(vibrato);
+      } else {
+        next_sample = notes[i]->osc_next();
+      }
 
       // gain * filter(oscnext)
       // this was arpmode... mby put back?
@@ -2566,13 +2565,11 @@ int updateAudio(){
 
   // dry will just be passed along if not enabled
   sig = render_effects(sig);
-  // set volume
-  sig = (int) sig * ( (float) volume/65535 );
 
-  if(mozziMicros() - buttonMeterTimer > 320000){
-    bigButtonBrightness = abs(sig);
-    buttonMeterTimer = mozziMicros();
-  }
+  // set volume
+  sig = (int) sig * volume;
+
+  bigButtonBrightness = abs(sig)>>7;
 
   return (int) lpf.next ( sig>>8 );
 }
