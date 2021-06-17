@@ -48,17 +48,17 @@ Cancel button?
 #include <Adafruit_NeoPixel.h>
 #define NUMPIXELS 7
 #define PIXELPIN 13
-#define PIXDELAY 4000
+#define PIXDELAY 100
 // #define NUMPIXFADESTEPS 160.0
 
 // its modes luv
 #define REGNOTEMODE 0
 #define ARPMODE 1
-#define REPEATMODE 2
-#define BEAUTYMODE 3
-#define PIANOMODE 4
-#define CHORDMODE 5
-#define CHORDSCHEMAMODE 6
+#define CHORDSCHEMAMODE 2
+#define CHORDMODE 3
+#define BEAUTYMODE 4
+#define PIANOMODE 5
+#define REPEATMODE 6
 #define SWEEPMODE 7
 // its gotta be last
 #define SELECTOPTIONMODE 8
@@ -79,12 +79,26 @@ Cancel button?
 #define ROTATE 6
 #define SHOWROTARY 7
 #define SHOWCHORDSCHEMA 8
-#define SHOWSELECT 9
-#define SHOWTEMPO 10
-#define SHOWFILTER 11
-#define SHOWVOL 12
+#define SHOWHARMMODE 9
+#define SHOWSELECT 10
+#define SHOWTEMPO 11
+#define SHOWFILTER 12
+#define SHOWVOL 13
 
-unsigned long pixel_timer = mozziMicros();
+#define OPTION0COLOR_R 245
+#define OPTION0COLOR_G 11
+#define OPTION0COLOR_B 196
+
+#define OPTION1COLOR_R 44
+#define OPTION1COLOR_G 242
+#define OPTION1COLOR_B 237
+
+#define OPTION2COLOR_R 242
+#define OPTION2COLOR_G 204
+#define OPTION2COLOR_B 19
+
+// unsigned long pixel_timer = mozziMicros();
+EventDelay pixdelay = EventDelay(PIXDELAY);
 unsigned long display_idle_timer = mozziMicros();
 unsigned long display_aux_timer = mozziMicros();
 
@@ -98,6 +112,10 @@ byte pixel_colors[21];
 // byte from_pixel_colors[21];
 // byte dest_pixel_colors[21];
 // uint8_t pixel_lerp_steps[7];
+
+// which arp shape
+byte harmonicMode = 0;
+const byte harmonicModeIntervals[] = { 0,2,2,1,2,2,2,1 };
 
 byte display_mode;
 byte pixel_counter = 0;
@@ -161,6 +179,8 @@ bool last_env_toggle = false;
 LowPassFilter lpf;
 byte cutoff = 196;
 float volume = 1.0;
+
+int8_t freqHeat = 0;
 
 // for flanger
 // AudioDelay <256> aDel;
@@ -434,12 +454,13 @@ long last_debounce_time = mozziMicros();
 // 10ms
 #define DEBOUNCE_DELAY 10000
 byte bigButtonBrightness = 0;
+byte vuTotal = 0;
 unsigned long buttonMeterTimer = mozziMicros();
 
 // rotary button
 bool rbstate = false;
 bool last_rbstate = false;
-long last_rbdebounce_time = mozziMicros();
+unsigned long last_rbdebounce_time = mozziMicros();
 // 10ms
 #define RBDEBOUNCE_DELAY 10000
 // time to hold down, 800ms
@@ -449,13 +470,15 @@ long rb_hold_timer = mozziMicros();
 bool rb_hold_once = false;
 bool rb_block_mode_increment = false;
 
-// rotary -128 to 128
+// rotary -127 to 127
 int8_t rotary_position = 12;
+int8_t last_rp_move = 0;
 // rotarys a pin reading
 bool last_a;
 bool clockwise = false;
-long last_rotary_debounce_time = mozziMicros();
-#define ROTARY_DEBOUNCE_DELAY 16000
+unsigned long last_rotary_debounce_time = mozziMicros();
+// #define ROTARY_DEBOUNCE_DELAY 32000
+// #define ROTARY_FUCKUP_DELAY 32000
 
 long sweep_timer = mozziMicros();
 
@@ -482,8 +505,8 @@ byte available_note_slot(){
 
 void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
 
-  Serial.println(F("NOTE IS"));
-  Serial.println(new_note);
+  // Serial.println(F("NOTE IS"));
+  // Serial.println(new_note);
   float freq = note_to_freq(new_note);
   // Serial.println("FREQ IS");
   // Serial.println(freq);
@@ -496,8 +519,8 @@ void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
     current_note = available_slot;  
   }
   
-  Serial.println(F("Running ::note_on for "));
-  Serial.println(available_slot);
+  // Serial.println(F("Running ::note_on for "));
+  // Serial.println(available_slot);
   notes[available_slot]->note_on();
   notes[available_slot]->set_available(false);
 
@@ -526,35 +549,59 @@ float note_to_freq(int midi_note){
   return 440.0 * ( pow( 2.0, ((midi_note-69.0)/12.0) ) );
 }
 
+// byte next_arp_note(){
+//   switch (arp_note_index) {
+//     case 0: return 70;
+//         break;
+//     case 1: return 72;
+//         break;
+//     case 2: return 74;
+//         break;
+//     case 3: return 75;
+//         break;
+//     case 4: return 77;
+//         break;
+//     case 5: return 79;
+//         break;
+//     case 6: return 81;
+//         break;
+//     case 7: return 82;
+//         break;
+//     case 8: return 84;
+//         break;
+//     case 9: return 86;
+//         break;
+//     case 10: return 87;
+//         break;
+//     case 11: arp_note_index = 0;
+//         return 70;
+//         break;
+//     default: return 70;
+//   }
+// }
+
 byte next_arp_note(){
-  switch (arp_note_index) {
-    case 0: return 70;
-        break;
-    case 1: return 72;
-        break;
-    case 2: return 74;
-        break;
-    case 3: return 75;
-        break;
-    case 4: return 77;
-        break;
-    case 5: return 79;
-        break;
-    case 6: return 81;
-        break;
-    case 7: return 82;
-        break;
-    case 8: return 84;
-        break;
-    case 9: return 86;
-        break;
-    case 10: return 87;
-        break;
-    case 11: arp_note_index = 0;
-        return 70;
-        break;
-    default: return 70;
+  return 72 + rotary_position + getHarmonicModeOffset(arp_note_index);
+}
+
+byte getHarmonicModeOffset(byte arp_index){
+  byte offset = 0;
+  
+  // start at our selected modes starting point
+  byte modeIntervalIndex = harmonicMode;
+
+  for(byte i=0; i<(arp_index+1); i++){
+    // add in the intervals for each step up to our current arp note
+    offset += harmonicModeIntervals[ modeIntervalIndex ];
+
+    modeIntervalIndex += 1;
+    if(modeIntervalIndex > 7){
+      // 
+      modeIntervalIndex = 0;
+    }
   }
+
+  return offset;
 }
 
 void play_arp_notes(){
@@ -563,9 +610,12 @@ void play_arp_notes(){
     byte next_note = next_arp_note();
 
     // offset note by current rotary value!
-    next_note += rotary_position;
+    // next_note += rotary_position;
 
     arp_note_index += 1;
+    if(arp_note_index > 7){
+      arp_note_index = 0;
+    }
 
     byte available_slot = available_note_slot();
     notes[available_slot]->note_off();
@@ -599,7 +649,8 @@ void set_weird_freq(){
 void set_sweep_freq(){
 
   // exponentially increase with rot pos
-  float sweep_freq = 440.0 + ( signbit(rotary_position/rotary_position) * (pow(rotary_position, 2)) );
+  // float sweep_freq = 440.0 + ( pow(rotary_position, 2) );
+  float sweep_freq = 440.0 + rotary_position + (8 * freqHeat);
   aSin0.setFreq(sweep_freq);
 }
 
@@ -632,20 +683,25 @@ void handle_rotary_button(){
           // button held down
           rb_hold_timer = now;
           rb_hold_once = true;
-          Serial.println(F("Set hold timer."));
+          // Serial.println(F("Set hold timer."));
         } else {
           // button released
 
           if(button_state && mode == CHORDSCHEMAMODE){
 
             // if big button is held, and its chordschema, use rb to increment chordschema
-            Serial.println(F("I incremented chordschema "));
+            // Serial.println(F("I incremented chordschema "));
             chord_schema++;
             if(chord_schema > 6){
               chord_schema = 0;
             }
             setDisplayMode(SHOWCHORDSCHEMA);
-
+          } else if(button_state && mode == ARPMODE){
+            harmonicMode++;
+            if(harmonicMode > 6){
+              harmonicMode = 0;
+            }
+            setDisplayMode(SHOWHARMMODE);
           } else {
             // otherwise, increment mode normally
 
@@ -655,8 +711,8 @@ void handle_rotary_button(){
                 mode = 0;
               }
               setup_mode(mode);
-              Serial.print(F("I incremented MODE to "));
-              Serial.println(mode);  
+              // Serial.print(F("I incremented MODE to "));
+              // Serial.println(mode);  
             }
 
             // released button from hold, dont block mode hcange anymore
@@ -670,7 +726,7 @@ void handle_rotary_button(){
     }
   }
 
-  if(rbstate && rb_hold_once && (now - rb_hold_timer > 1200000)){
+  if(rbstate && rb_hold_once && (now - rb_hold_timer > 300000)){
     // Serial.print(F("LASMODE HELLO "));
     // Serial.println(lastMode);
     
@@ -681,7 +737,7 @@ void handle_rotary_button(){
       // held rb for long enough (3s), start tempo setting mode
       setup_mode(SELECTOPTIONMODE);
       setDisplayMode(SHOWSELECT);
-      Serial.println(F("Set freakin selectoptionmode"));
+      // Serial.println(F("Set freakin selectoptionmode"));
     } else if(lastMode >= 0){
       // if already in settempo, switch back to prev mode
       // Serial.println(F("All lastmode baby"));
@@ -756,13 +812,13 @@ void handle_note_button(){
         } else if(mode == CHORDMODE){
 
           // play a chord
-          Serial.print(F("love to play chord "));
-          Serial.println(rotary_position);
+          // Serial.print(F("love to play chord "));
+          // Serial.println(rotary_position);
           play_seq_chord(rotary_position);
         } else if(mode == CHORDSCHEMAMODE){
 
-          Serial.print(F("love to play schema chord "));
-          Serial.println(rotary_position);
+          // Serial.print(F("love to play schema chord "));
+          // Serial.println(rotary_position);
 
           // in this case, were thinking of input as a note were modifying
           play_schema_chord(60+rotary_position);
@@ -774,7 +830,7 @@ void handle_note_button(){
           }
         } else if(mode == REPEATMODE){
 
-          Serial.println(F("Playing Repeat"));
+          // Serial.println(F("Playing Repeat"));
 
           int8_t note = 72 + rotary_position;
           play_note(note, getArpTime(envelope_mode), available_slot);
@@ -785,7 +841,7 @@ void handle_note_button(){
           // next note is C3 offset by current rotary value!
 
           // play overtones fool
-          Serial.print(F("trying hard to play beauty... "));
+          // Serial.print(F("trying hard to play beauty... "));
           // for(byte i=0; i<4; i++){
           //   notes[i]->note_off();
           // }
@@ -810,8 +866,8 @@ void handle_note_button(){
         } else if(mode == SELECTOPTIONMODE){
           // pressed button, so select mode based on rotary position % 3
           byte optionMode = abs(rotary_position) % 3 + 9;
-          Serial.print(F("I have selected option "));
-          Serial.println(optionMode);
+          // Serial.print(F("I have selected option "));
+          // Serial.println(optionMode);
           setup_mode( optionMode );
         } else if(mode == SETTEMPOMODE){
           // use button pushes to set tempo
@@ -886,8 +942,8 @@ void setRepeatNote(byte note){
     for(byte i=2; i<4; i++){
 
     if(notes[i]->is_available() == true){
-      Serial.print(i);
-      Serial.println(F(" was available to set repeat..."));
+      // Serial.print(i);
+      // Serial.println(F(" was available to set repeat..."));
       available_slot = i;
       break;
     }
@@ -929,8 +985,8 @@ void play_schema_chord(byte starting_note){
   byte note3 = 0;
   byte note4 = 0;
 
-  Serial.print(F("Chord schema is "));
-  Serial.println(chord_schema); 
+  // Serial.print(F("Chord schema is "));
+  // Serial.println(chord_schema); 
 
   if(chord_schema == MAJOR){
     note1 = starting_note;
@@ -1039,8 +1095,8 @@ void play_seq_chord(byte note_offset){
   //  how many of our 9-step 'octaves' did we get, add a real octave for each additional one
   byte octave_offset = ( note_offset/9 ) * 12;
 
-  Serial.print(F("Octave Offset... "));
-  Serial.println(octave_offset);
+  // Serial.print(F("Octave Offset... "));
+  // Serial.println(octave_offset);
 
   int r_time = getReleaseTime( envelope_mode );
   
@@ -1072,13 +1128,13 @@ void stop_play_weird(){
 }
 
 void start_play_sweep(){
-  Serial.println(F("I start play Sweep")); 
-  envelope0.noteOn(true);
+  // Serial.println(F("I start play Sweep")); 
+  envelope0.noteOn();
   play_continuing = PLAYING;
 }
 
 void stop_play_sweep(){
-  Serial.println(F("I Stop play Sweep"));
+  // Serial.println(F("I Stop play Sweep"));
   envelope0.noteOff();
   play_continuing = TAILING;
   // set up env timer for the one Note we're using (0)
@@ -1265,7 +1321,7 @@ void setup(){
   // seed dat
   // randomSeed(analogRead(0));
 
-  Serial.begin(9600);
+  // Serial.begin(9600);
   startMozzi(CONTROL_RATE); // :)
   note0 = Note(0, 0);
   note1 = Note(1, 0);
@@ -1392,7 +1448,7 @@ void setup_envelopes(byte env_mode){
     
     envelope3.setTimes(30, 60, 2000, 100 );
 
-    Serial.println(F("I love bein in here!"));
+    // Serial.println(F("I love bein in here!"));
   } else if(env_mode == BEAUTY_LONG_ENV) {
     envelope0.setADLevels(255,225);
     envelope1.setADLevels(255,225);
@@ -1508,7 +1564,7 @@ void setup_mode(byte newmode){
     if(mode == SETTEMPOMODE){
       setDisplayMode(SHOWTEMPO);
     } else if(mode == SETFILTERMODE){
-      Serial.println(F("Setting filter mode display"));
+      // Serial.println(F("Setting filter mode display"));
       setDisplayMode(SHOWFILTER);
     } else if(mode == SETVOLMODE){
       setDisplayMode(SHOWVOL);
@@ -1521,45 +1577,48 @@ void setup_mode(byte newmode){
 void setDisplayMode(byte dispMode){
   bool zeroOutDisplay = false;
   if(dispMode == SHOWMODE){
-    Serial.println(F("I started showmode"));
+    // Serial.println(F("I started showmode"));
   } else if(dispMode == PLAY){
-    Serial.println(F("I started playmode"));
+    // Serial.println(F("I started playmode"));
     // set colors to 0 to get rid of cool blue
     zeroOutDisplay = true;
   } else if(dispMode == COOL){
-    Serial.println(F("I started coolmode"));
+    // Serial.println(F("I started coolmode"));
     zeroOutDisplay = true;
   } else if (dispMode == WEIRD){
-    Serial.println(F("I started weridispMode"));
+    // Serial.println(F("I started weridispMode"));
   } else if(dispMode == IDLE){
     pixel_flag = true;
     // set random colors for init on IDLE
-    Serial.println(F("I started IDLEmode"));
+    // Serial.println(F("I started IDLEmode"));
     // zeroOutDisplay = true;
     for(byte i=0; i<21; i++){
       pixel_colors[i] = rand() % 10;
     }
   } else if(dispMode == LOADING){
-    Serial.println(F("I started loadingmode"));
+    // Serial.println(F("I started loadingmode"));
     zeroOutDisplay = true;
   } else if(dispMode == SHOWROTARY){
     zeroOutDisplay = true;
-    Serial.println(F("I started showrotarymode"));
+    // Serial.println(F("I started showrotarymode"));
   } else if(dispMode == SHOWCHORDSCHEMA){
     zeroOutDisplay = true;
-    Serial.println(F("I started showchordschemamode"));
+    // Serial.println(F("I started showchordschemamode"));
+  } else if(dispMode == SHOWHARMMODE){
+    zeroOutDisplay = true;
+    // Serial.println(F("I started showchordschemamode"));
   } else if(dispMode == SELECTOPTIONMODE){
     zeroOutDisplay = true;
-    Serial.println(F("I started selectoptionmode"));
+    // Serial.println(F("I started selectoptionmode"));
   } else if(dispMode == SHOWTEMPO){
     zeroOutDisplay = true;
-    Serial.println(F("I started showtempomode"));
+    // Serial.println(F("I started showtempomode"));
   } else if(dispMode == SHOWFILTER){
     zeroOutDisplay = true;
-    Serial.println(F("I started showfiltermode"));
+    // Serial.println(F("I started showfiltermode"));
   } else if(dispMode == SHOWVOL){
     zeroOutDisplay = true;
-    Serial.println(F("I started showvolmode"));
+    // Serial.println(F("I started showvolmode"));
   }
 
   if(zeroOutDisplay){
@@ -1583,79 +1642,91 @@ void updateControl() {
 
   bool aVal = digitalRead(ROTARY_A_PIN);
   if(aVal != last_a){
-    unsigned long now = mozziMicros();
-    if(now - last_rotary_debounce_time > ROTARY_DEBOUNCE_DELAY){
 
-      // Means the knob is rotating// if the knob is rotating, we need to determine direction// We do that by reading pin B.
- 
-      // either way show rotary
-      if(mode < SELECTOPTIONMODE && display_mode != SHOWROTARY){
-        setDisplayMode(SHOWROTARY);
-      }
+    // Means the knob is rotating// if the knob is rotating, we need to determine direction// We do that by reading pin B.
 
-      // hold the increment were gonna move by
-      int8_t rp_move = 0;
+    // either way show rotary
+    if(mode < SELECTOPTIONMODE && display_mode != SHOWROTARY){
+      // setDisplayMode(SHOWROTARY);
+    }
 
-      if(digitalRead(ROTARY_B_PIN) != aVal){
-        // Means pin A Changed first -We're RotatingClockwise.
-        // Serial.println(F("CCW"));
+    // hold the increment were gonna move by
+    int8_t rp_move = 0;
 
-        rp_move = 1;
+    if(digitalRead(ROTARY_B_PIN) != aVal){
 
-        // show rotary UP
-        pixel_counter = 5;
-        pixel_flag = true;
-      } else {
-        // Otherwise B changedfirst and we're moving CCW
-        // Serial.println(F("CW"));
-        rp_move = -1;
- 
-        // show rotary DOWN
-        pixel_counter = 3;
-        pixel_flag = false;
-      }
+      // Means pin A Changed first -We're RotatingClockwise.
+      // Serial.println(F("CCW"));
+
+      rp_move = 1;
+
+      // show rotary UP
+      pixel_counter = 5;
+      pixel_flag = true;
+    } else {
+      // Otherwise B changedfirst and we're moving CCW
+      // Serial.println(F("CW"));
+      rp_move = -1;
+
+      // show rotary DOWN
+      pixel_counter = 3;
+      pixel_flag = false;
+    }
+
+    // if(rp_move != last_rp_move){
+
+    //   unsigned long now = mozziMicros();
+    //   if(now - last_rotary_debounce_time < ROTARY_DEBOUNCE_DELAY){
+    //     // block rp_move if we're trying to reverse direction and its been less than 32ms since last move
+    //     Serial.println("RP ALTER!");
+    //     rp_move = last_rp_move;
+    //     last_rotary_debounce_time = now;
+
+    //   }
+    // }
+
+    // last_rp_move = rp_move;
+
+    // is option
+    if(mode > SELECTOPTIONMODE){
 
       // is option
-      if(mode > SELECTOPTIONMODE){
-
-        // is option
-        if(mode == SETFILTERMODE){
-          if(cutoff + 2*rp_move >= 0 && cutoff + 2*rp_move <= 255 ){
-            cutoff += 2*rp_move;
-          }
-          // actually set it here
-          lpf.setCutoffFreq( cutoff );
-          Serial.print(F("cutoff "));
-          Serial.println(cutoff);
-        } else if(mode == SETVOLMODE){
-          if( volume + 0.1*rp_move > 0 && volume + 0.1*rp_move <= 65535 ){
-            // changed here, gets relfected in updateaudio
-            volume += 0.1*rp_move;
-          }
-
-          // bad debouncing problems...
-          Serial.println(F("HEy vol !"));
-          Serial.println(volume);
+      if(mode == SETFILTERMODE){
+        if(cutoff + 8*rp_move >= 0 && cutoff + 8*rp_move <= 255 ){
+          cutoff += 8*rp_move;
         }
-      } else if(rotary_position + rp_move > -128 && rotary_position + rp_move < 128){
+        // actually set it here
+        lpf.setCutoffFreq( cutoff );
+        // Serial.print(F("cutoff "));
+        // Serial.println(cutoff);
+      } else if(mode == SETVOLMODE){
+        if( volume + 0.02*rp_move > 0 && volume + 0.02*rp_move <= 1.0 ){
+          // changed here, gets relfected in updateaudio
+          volume += 0.02*rp_move;
+        }
 
-        // is regular
-        rotary_position += rp_move;
-          
-        Serial.print(F("Rotary postition is "));
-        Serial.println(rotary_position);
+        // bad debouncing problems...
+        // Serial.println(F("HEy vol !"));
+        // Serial.println(volume);
       }
+    } else if(rotary_position + rp_move > -127 && rotary_position + rp_move < 127){
 
-      // only set when changing freq
-      if(mode == WEIRDMODE){
-        set_weird_freq();
-      } else if(mode == SWEEPMODE){
-        pixel_flag = !pixel_flag;
-      }
+      // is regular
+      rotary_position += rp_move;
+        
+      // Serial.print(F("Rotary postition is "));
+      // Serial.println(rotary_position);
+    }
+
+    // only set when changing freq
+    if(mode == WEIRDMODE){
+      set_weird_freq();
+    } else if(mode == SWEEPMODE){
+      pixel_flag = !pixel_flag;
+      freqHeat += rp_move;
     }
 
     last_a = aVal;
-    last_rotary_debounce_time = now;
   }
   
   handle_rotary_button();
@@ -1723,9 +1794,18 @@ void updateControl() {
     } else if(mode == SWEEPMODE){
       // wait 2ms to change sweep freq
       //  oops 200 is 2 microseconds
-      if((mozziMicros() - sweep_timer) > 200000){
+      unsigned long now = mozziMicros();
+      if(now-sweep_timer > 1800000){
+
+        if(freqHeat > 0){
+          freqHeat -= 1;
+        } else if(freqHeat < 0){
+          freqHeat += 1;
+        }
+      }
+      if((now - sweep_timer) > 20000){
         set_sweep_freq();
-        sweep_timer = mozziMicros();
+        sweep_timer = now;
       }
     } else if(mode == REPEATMODE){
 
@@ -1754,8 +1834,8 @@ void updateControl() {
           if(note > 0){
 
             // yes, werre repeating, start playing a repeat note, this will start another timer for the note we play
-            Serial.print(F("I payed a repeat dummy "));
-            Serial.println(note);
+            // Serial.print(F("I payed a repeat dummy "));
+            // Serial.println(note);
             play_note(note, 600, i);
           } else {
 
@@ -1794,7 +1874,7 @@ void updateControl() {
 
     // shut off after we waited for the release
     if(play_continuing == TAILING && note_delays[0]->ready()){
-      Serial.println(F("I stoped play_continuing"));
+      // Serial.println(F("I stoped play_continuing"));
       play_continuing = STOPPED;
     }
   }
@@ -1842,6 +1922,8 @@ void handleDisplay(){
     showRotary();
   } else if(display_mode == SHOWCHORDSCHEMA){
     showChordSchema();
+  } else if(display_mode == SHOWHARMMODE){
+    showHarmMode();
   } else if(display_mode == SHOWSELECT){
     showSelectOption();
   } else if(display_mode == SHOWTEMPO){
@@ -1855,14 +1937,16 @@ void handleDisplay(){
   if(!button_state && display_mode != IDLE && mode < SELECTOPTIONMODE && mozziMicros() - display_idle_timer >= 3000000){
     // go back after 2s if button not held
     setDisplayMode(IDLE);
-    Serial.println(F("Set IDLE again."));
+    // Serial.println(F("Set IDLE again."));
   }
 }
 
 void writeDisplay(){
 // set neopixel
-  // unsigned long now = mozziMicros();
+  unsigned long now = mozziMicros();
   // if(now - pixel_timer >= PIXDELAY){
+
+  if(mode == SETTEMPOMODE || pixdelay.ready()){
     handleDisplay();
 
     pixel.clear();
@@ -1887,7 +1971,8 @@ void writeDisplay(){
     handleArcadeButton();
 
     // pixel_timer = now;
-  // }
+    pixdelay.start(PIXDELAY);
+  }
 }
 
 void handleArcadeButton(){
@@ -1946,7 +2031,6 @@ void showPlay(){
     }
   }
 
-
   byte decrement;
   for(byte i=12; i<21; i++){
     if(!someonePlayin){
@@ -1968,15 +2052,36 @@ void showPlay(){
       }      
     }
   }
+
+  // bad VU meter
+  // if(vuTotal+bigButtonBrightness<255){
+  //   vuTotal += bigButtonBrightness; 
+  // } else {
+  //   vuTotal = 255;
+  // }
+  // if(vuTotal-16 > 0 ){
+  //   vuTotal -= 16;
+  // } else {
+  //   vuTotal = 0;
+  // }
+  // pixel_colors[12] = vuTotal>80 ? vuTotal : 0;
+  // pixel_colors[13] = 0;
+  // pixel_colors[14] = 0;
+  // pixel_colors[15] = vuTotal>40 ? vuTotal : 0;
+  // pixel_colors[16] = vuTotal>40 ? vuTotal : 0;
+  // pixel_colors[17] = 0;
+  // pixel_colors[18] = 0;
+  // pixel_colors[19] = vuTotal;
+  // pixel_colors[20] = 0;
 }
 
-void safeFadePixel(byte pixIndex, byte decrement){
-  if(pixel_colors[pixIndex] - decrement > 0){
-    pixel_colors[pixIndex] -= decrement;
-  } else {
-    pixel_colors[pixIndex] = 0;
-  }
-}
+// void safeFadePixel(byte pixIndex, byte decrement){
+//   if(pixel_colors[pixIndex] - decrement > 0){
+//     pixel_colors[pixIndex] -= decrement;
+//   } else {
+//     pixel_colors[pixIndex] = 0;
+//   }
+// }
 
 void displayPlayNote(byte note_index){
   // well hi
@@ -1989,20 +2094,30 @@ void displayPlayNote(byte note_index){
   // Serial.print(F("Setting pix at "));
   // Serial.println(pixcolorindex);
 
-  // pixel_colors[pixcolorindex] = rand() % 64;
-  // pixel_colors[pixcolorindex+1] = rand() % 32;
-  // pixel_colors[pixcolorindex+2] = rand() % 128;
-  pixel_colors[pixcolorindex] = mode * 12;
-  pixel_colors[pixcolorindex+1] = 64 / mode;
-  pixel_colors[pixcolorindex+2] = 128 - (mode * 12);
+  pixel_colors[pixcolorindex] = rand() % 64;
+  pixel_colors[pixcolorindex+1] = rand() % 32;
+  pixel_colors[pixcolorindex+2] = rand() % 128;
+  // pixel_colors[pixcolorindex] = mode * 12;
+  // pixel_colors[pixcolorindex+1] = 64 / mode;
+  // pixel_colors[pixcolorindex+2] = 128 - (mode * 12);
 
   for(byte i=4; i<NUMPIXELS; i++){
     // if its notes playin, turn on the meter lgiths
-    // depending on mode, different meter light color
-    pixel_colors[i*3] = (mode * 8);
+    pixel_colors[i*3] = 25;
     pixel_colors[i*3+1] = 0;
-    pixel_colors[i*3+2] = 255 - mode * 24;
+    pixel_colors[i*3+2] = 125;
   }
+
+    // // gyr
+    // pixel_colors[12] = 255;
+    // pixel_colors[13] = 0;
+    // pixel_colors[14] = 0;
+    // pixel_colors[15] = 255;
+    // pixel_colors[16] = 255;
+    // pixel_colors[17] = 0;
+    // pixel_colors[18] = 0;
+    // pixel_colors[19] = 255;
+    // pixel_colors[20] = 0;
 }
 
 void showRotary(){
@@ -2045,23 +2160,23 @@ void showSelectOption(){
     byte brightness;
 
     if(i < 3){
-      brightness = selected == 0 ? 255 : 10;
+      brightness = selected == 0 ? 1 : 16;
       // 12
-      pixel_colors[i*3] = brightness;
-      pixel_colors[i*3+1] = 0;
-      pixel_colors[i*3+2] = 0;
+      pixel_colors[i*3] = OPTION0COLOR_R/brightness;
+      pixel_colors[i*3+1] = OPTION0COLOR_G/brightness;
+      pixel_colors[i*3+2] = OPTION0COLOR_B/brightness;
     } else if(i < 5){
-      brightness = selected == 1 ? 255 : 10;
+      brightness = selected == 1 ? 1 : 16;
       // 34
-      pixel_colors[i*3] = brightness;
-      pixel_colors[i*3+1] = brightness;
-      pixel_colors[i*3+2] = 0;
+      pixel_colors[i*3] = OPTION1COLOR_R/brightness;
+      pixel_colors[i*3+1] = OPTION1COLOR_G/brightness;
+      pixel_colors[i*3+2] = OPTION1COLOR_B/brightness;
     } else {
-      brightness = selected == 2 ? 255 : 10;
+      brightness = selected == 2 ? 1 : 16;
       // 56
-      pixel_colors[i*3] = 0;
-      pixel_colors[i*3+1] = 0;
-      pixel_colors[i*3+2] = brightness;
+      pixel_colors[i*3] = OPTION2COLOR_R/brightness;
+      pixel_colors[i*3+1] = OPTION2COLOR_G/brightness;
+      pixel_colors[i*3+2] = OPTION2COLOR_B/brightness;
     }
   }
 }
@@ -2083,7 +2198,7 @@ void showFilter(){
 
 void showVol(){
    for(byte i=1; i<NUMPIXELS; i++){
-    if( i < floor( (float) volume/65535 * 8 ) ){
+    if( i < floor( (float) volume/1.0 * 8 ) ){
       // show pix proportional to vol oom
       pixel_colors[i*3] = 80;
       pixel_colors[i*3+1] = 10;
@@ -2241,8 +2356,26 @@ void showChordSchema(){
     } else {
       // otherwise background color
       pixel_colors[i*3] = 0;
-      pixel_colors[i*3+1] = 36;
-      pixel_colors[i*3+2] = 24;
+      pixel_colors[i*3+1] = 0;
+      pixel_colors[i*3+2] = 3;
+    }
+
+  }
+}
+
+void showHarmMode(){
+  for(byte i=0; i<NUMPIXELS; i++){
+
+    if(i <= harmonicMode){
+      // red for chordschema count
+      pixel_colors[i*3] = 0;
+      pixel_colors[i*3+1] = 50;
+      pixel_colors[i*3+2] = 200;
+    } else {
+      // otherwise background color
+      pixel_colors[i*3] = 0;
+      pixel_colors[i*3+1] = 3;
+      pixel_colors[i*3+2] = 0;
     }
 
   }
@@ -2340,16 +2473,31 @@ byte lerp(byte a, byte b, uint8_t u){
 // }
 
 void showMode(int8_t mode){
-  byte r = 255;
-  byte g = 0;
-  byte b = 255;
+  byte r = 200;
+  byte g = 90;
+  byte b = 30;
   byte numToLight = mode;
+  if(mode == REGNOTEMODE){
+    // nothin!
+  } else if(mode <= CHORDMODE){
+    r = 32;
+    g = 43;
+    b = 160;
+  } else if(mode <= PIANOMODE){
+    r = 0;
+    g = 250;
+    b = 154;
+  } else if(mode <= SWEEPMODE){
+    r = 135;
+    g = 100;
+    b = 0;
+  }
 
   if(mode >= NUMPIXELS){
     // for big mode (7 or more aka more than 0..6), different color
-    r = 0;
-    g = 255;
-    b = 0;
+    // r = 0;
+    // g = 255;
+    // b = 0;
     numToLight = mode - NUMPIXELS;
   }
 
@@ -2558,7 +2706,7 @@ int updateAudio(){
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.68)  );
         // sig += (int) ( notes[i]->env_next() );
       } else if(mode == SETFILTERMODE || mode == SETVOLMODE){
-        sig += ( notes[i]->env_next() * (next_sample >> 2) );
+        // sig += ( notes[i]->env_next() * (next_sample >> 2) );
       }
     }
   }
@@ -2567,11 +2715,13 @@ int updateAudio(){
   sig = render_effects(sig);
 
   // set volume
-  sig = (int) sig * volume;
+  // Serial.println(sig);
+  sig = (int) (sig * volume)>>8;
+  // Serial.println(sig);
 
-  bigButtonBrightness = abs(sig)>>7;
+  bigButtonBrightness = abs(sig);
 
-  return (int) lpf.next ( sig>>8 );
+  return (int) lpf.next ( sig );
 }
 
 void loop(){

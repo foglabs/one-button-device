@@ -177,10 +177,10 @@ major code spots
 maybe do counter of how many semitones when knob up or down
 
 need to
-  adjust lpf
-  adjust volume
+  *adjust lpf
+  *adjust volume
 
-selecting lpf option (yellow) works once, then not again
+*selecting lpf option (yellow) works once, then not again
 
 
 
@@ -189,6 +189,16 @@ hold to enter SELECTOPTIONMODE
   go into tempomode
   go into filtermode
   etc
+
+
+freezez after a bunch of rotary moves
+  screen turns off
+
+  related to screen operation -> doesnt happen with pix disabled
+
+  rotary display!
+    tuned it off, woo good result
+
 
 
 
@@ -213,6 +223,42 @@ build list
 22awg silicone insulated wire
 
 1 2.2mm 9v power supply
+
+
+
+
+
+
+
+
+pick key etc ARPMODE
+  same way as chordschema
+
+sweepmode broken?
+
+more inst sounds? / recolor them
+
+show repeat mode different
+
+
+
+I   
+Dorian  ii  
+Phrygian  iii   
+Lydian  IV  
+Mixolydian  V   
+Aeolian   vi  
+Locrian   viiø  
+
+
+
+W–W–H–W–W–W–H
+W–H–W–W–W–H–W
+H–W–W–W–H–W–W
+W–W–W–H–W–W–H
+W–W–H–W–W–H–W
+W–H–W–W–H–W–W
+H–W–W–H–W–W–W
 
 
 
