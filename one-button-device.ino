@@ -84,6 +84,7 @@ Cancel button?
 #define SHOWTEMPO 11
 #define SHOWFILTER 12
 #define SHOWVOL 13
+#define SHOWINTRO 14
 
 #define OPTION0COLOR_R 245
 #define OPTION0COLOR_G 11
@@ -99,8 +100,10 @@ Cancel button?
 
 // unsigned long pixel_timer = mozziMicros();
 EventDelay pixdelay = EventDelay(PIXDELAY);
-unsigned long display_idle_timer = mozziMicros();
-unsigned long display_aux_timer = mozziMicros();
+#define IDLEDELAY 3000
+EventDelay display_idle_delay = EventDelay( IDLEDELAY );
+// unsigned long display_aux_timer = mozziMicros();
+EventDelay display_aux_delay = EventDelay();
 
 // for +white version
 Adafruit_NeoPixel pixel(NUMPIXELS, PIXELPIN, NEO_GRBW + NEO_KHZ800);
@@ -157,6 +160,10 @@ Oscil <8192, AUDIO_RATE> aSin3(SIN8192_DATA);
 
 // davibrato :D
 Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aVibrato(COS2048_DATA);
+
+// deelay
+int delayTime = 2400;
+int delayBuffer[120];
 
 // ReverbTank reverb;
 
@@ -450,23 +457,29 @@ uint8_t repeat_notes[4] = {0,0,0,0};
 // button stuff
 bool button_state = false;
 bool last_button_state = false;
-long last_debounce_time = mozziMicros();
+// long last_debounce_time = mozziMicros();
+EventDelay last_debounce_delay = EventDelay();
+
 // 10ms
-#define DEBOUNCE_DELAY 10000
+#define DEBOUNCE_DELAY 10
 byte bigButtonBrightness = 0;
 byte vuTotal = 0;
 unsigned long buttonMeterTimer = mozziMicros();
 
 // rotary button
 bool rbstate = false;
-bool last_rbstate = false;
-unsigned long last_rbdebounce_time = mozziMicros();
+
+// unsigned long last_rbdebounce_time = mozziMicros();
+EventDelay last_rbdebounce_delay = EventDelay();
 // 10ms
-#define RBDEBOUNCE_DELAY 10000
+#define RBDEBOUNCE_DELAY 10
 // time to hold down, 800ms
 #define RB_DELAY 0
-long rb_timer = mozziMicros();
-long rb_hold_timer = mozziMicros();
+// long rb_timer = mozziMicros();
+
+// long rb_hold_timer = mozziMicros();
+EventDelay rb_hold_delay = EventDelay();
+
 bool rb_hold_once = false;
 bool rb_block_mode_increment = false;
 
@@ -476,10 +489,13 @@ int8_t last_rp_move = 0;
 // rotarys a pin reading
 bool last_a;
 bool clockwise = false;
-unsigned long last_rotary_debounce_time = mozziMicros();
-// #define ROTARY_DEBOUNCE_DELAY 32000
+// unsigned long last_rotary_debounce_time = mozziMicros();
+
+#define ROTARY_DEBOUNCE_DELAY 32
+EventDelay rotary_debounce_delay = EventDelay(ROTARY_DEBOUNCE_DELAY);
 // #define ROTARY_FUCKUP_DELAY 32000
 
+// keep like this cause its actually two timers
 long sweep_timer = mozziMicros();
 
 byte available_note_slot(){
@@ -539,7 +555,7 @@ void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
   // Serial.print(F("Start display for "));
   // Serial.println(available_slot);
   // keep resetting disp timer os play stay (rather than go back to cool)
-  display_idle_timer = mozziMicros();
+  display_idle_delay.start(IDLEDELAY);
 }
 
 float note_to_freq(int midi_note){
@@ -659,12 +675,7 @@ void handle_rotary_button(){
   // goes low when pressed
   bool readin = !digitalRead(ROTARY_BUTTON_PIN);
 
-  if(readin != last_rbstate){
-    last_rbdebounce_time = mozziMicros();
-  }
-
-  long now = mozziMicros();
-  if((now - last_rbdebounce_time) > RBDEBOUNCE_DELAY){
+  if( last_rbdebounce_delay.ready() ){
 
     // doing stuff after debounce
 
@@ -676,57 +687,55 @@ void handle_rotary_button(){
       rbstate = readin;
 
       // this is wher da magik happens
-      if( (now - rb_timer) > RB_DELAY ){
+      if(rbstate){
+        // button held down
+        rb_hold_delay.start( 300 );
+        rb_hold_once = true;
+        // Serial.println(F("Set hold timer."));
+      } else {
+        // button released
 
-        rb_timer = now;
-        if(rbstate){
-          // button held down
-          rb_hold_timer = now;
-          rb_hold_once = true;
-          // Serial.println(F("Set hold timer."));
-        } else {
-          // button released
+        if(button_state && mode == CHORDSCHEMAMODE){
 
-          if(button_state && mode == CHORDSCHEMAMODE){
-
-            // if big button is held, and its chordschema, use rb to increment chordschema
-            // Serial.println(F("I incremented chordschema "));
-            chord_schema++;
-            if(chord_schema > 6){
-              chord_schema = 0;
-            }
-            setDisplayMode(SHOWCHORDSCHEMA);
-          } else if(button_state && mode == ARPMODE){
-            harmonicMode++;
-            if(harmonicMode > 6){
-              harmonicMode = 0;
-            }
-            setDisplayMode(SHOWHARMMODE);
-          } else {
-            // otherwise, increment mode normally
-
-            if(lastMode<0 && mode < SELECTOPTIONMODE && !rb_block_mode_increment){
-              mode++;
-              if(mode == SELECTOPTIONMODE){
-                mode = 0;
-              }
-              setup_mode(mode);
-              // Serial.print(F("I incremented MODE to "));
-              // Serial.println(mode);  
-            }
-
-            // released button from hold, dont block mode hcange anymore
-            rb_block_mode_increment = false;
-
+          // if big button is held, and its chordschema, use rb to increment chordschema
+          // Serial.println(F("I incremented chordschema "));
+          chord_schema++;
+          if(chord_schema > 6){
+            chord_schema = 0;
           }
+          setDisplayMode(SHOWCHORDSCHEMA);
+        } else if(button_state && mode == ARPMODE){
+          harmonicMode++;
+          if(harmonicMode > 6){
+            harmonicMode = 0;
+          }
+          setDisplayMode(SHOWHARMMODE);
+        } else {
+          // otherwise, increment mode normally
+
+          if(lastMode<0 && mode < SELECTOPTIONMODE && !rb_block_mode_increment){
+            mode++;
+            if(mode == SELECTOPTIONMODE){
+              mode = 0;
+            }
+            setup_mode(mode);
+            // Serial.print(F("I incremented MODE to "));
+            // Serial.println(mode);  
+          }
+
+          // released button from hold, dont block mode hcange anymore
+          rb_block_mode_increment = false;
 
         }
 
       }
+
     }
+
+    last_rbdebounce_delay.start(RBDEBOUNCE_DELAY);
   }
 
-  if(rbstate && rb_hold_once && (now - rb_hold_timer > 300000)){
+  if(rbstate && rb_hold_once && rb_hold_delay.ready() ){
     // Serial.print(F("LASMODE HELLO "));
     // Serial.println(lastMode);
     
@@ -751,8 +760,6 @@ void handle_rotary_button(){
     rb_hold_once = false;
   }
 
-  // save the reading. Next time through the loop, it'll be the lastButtonState:
-  last_rbstate = readin;
 }
 
 bool isOnBeat(unsigned long startTime, unsigned long now, short tempo){
@@ -772,11 +779,11 @@ void handle_note_button(){
   // If the switch changed, due to noise or pressing:
   if (reading != last_button_state) {
     // reset the debouncing timer
-    last_debounce_time = mozziMicros();
+    last_debounce_delay.start(DEBOUNCE_DELAY);
     // Serial.println("Raeding was note same");
   }
 
-  if ((mozziMicros() - last_debounce_time) > DEBOUNCE_DELAY) {
+  if ( last_debounce_delay.ready() ) {
     // whatever the reading is at, it's been there for longer than the debounce
     // delay, so take it as the actual current state:
 
@@ -890,7 +897,7 @@ void handle_note_button(){
           tempoTapTimer = now;
 
           // dont go back to idle if were tapping
-          display_idle_timer = now;
+          display_idle_delay.start( IDLEDELAY );
         } else {
           // something
         }
@@ -1156,7 +1163,11 @@ bool short_env_disabled(){
 }
 
 // too big for memory :/
-bool reverb_enabled(){
+// bool reverb_enabled(){
+//   return toggles[2];
+// }
+
+bool delay_enabled(){
   return toggles[2];
 }
 
@@ -1165,6 +1176,7 @@ bool reverb_enabled(){
 // }
 
 bool vibrato_enabled(){
+  return false;
   // defined near osc_next
   return toggles[2];
 }
@@ -1197,6 +1209,20 @@ void set_effects() {
 #define RATIO 3.0
 #define SLOPE -2.0
 // #define SOFTSLOPEFACTOR -1.0/6.0;
+
+// int render_delay(int signal){
+//   if(delay_delay.ready()){
+//     delayIndex[]
+//     // delayBuffer[100] = 100;
+//     // return delayBuffer[100];  
+//     if(delayIndex == 256){
+//       delayIndex = 0
+//     }
+
+//     return delayBuffer[delayIndex];
+//   }
+  
+// }
 
 int render_compressor(int signal){
 
@@ -1237,6 +1263,10 @@ int render_effects(int signal) {
   // if(flanger_enabled()){
   //   // do delay
   //   signal = signal + aDel.next((int8_t)signal, 512);
+  // }
+
+  // if(delay_enabled()){
+  //   signal = signal + render_delay(signal);
   // }
 
   // if(waveshaper_enabled()){
@@ -1345,6 +1375,7 @@ void setup(){
 
   // INITIAL MODEFOOL
   setup_mode(REGNOTEMODE);
+  setDisplayMode(SHOWINTRO);
 }
 
 unsigned int oneBeat(){
@@ -1599,7 +1630,7 @@ void setDisplayMode(byte dispMode){
     // Serial.println(F("I started loadingmode"));
     zeroOutDisplay = true;
   } else if(dispMode == SHOWROTARY){
-    zeroOutDisplay = true;
+    // zeroOutDisplay = true;
     // Serial.println(F("I started showrotarymode"));
   } else if(dispMode == SHOWCHORDSCHEMA){
     zeroOutDisplay = true;
@@ -1619,6 +1650,9 @@ void setDisplayMode(byte dispMode){
   } else if(dispMode == SHOWVOL){
     zeroOutDisplay = true;
     // Serial.println(F("I started showvolmode"));
+  } else if(dispMode == SHOWINTRO){
+    // Serial.println(F("I started showvolmode"));
+    zeroOutDisplay = true;
   }
 
   if(zeroOutDisplay){
@@ -1627,12 +1661,14 @@ void setDisplayMode(byte dispMode){
     }
   }
 
-  display_idle_timer = mozziMicros();
+  display_idle_delay.start(IDLEDELAY);
 
   // reset all this reusable shit  
   pixel_counter = 0;
   pixel_counter2 = 0;
-  display_aux_timer = mozziMicros();
+  // display_aux_timer = mozziMicros();
+  // reset to nothing so we hit its set in display__ method
+  display_aux_delay.start();
   pixel_flag = false;
 
   display_mode = dispMode;
@@ -1647,7 +1683,7 @@ void updateControl() {
 
     // either way show rotary
     if(mode < SELECTOPTIONMODE && display_mode != SHOWROTARY){
-      // setDisplayMode(SHOWROTARY);
+      setDisplayMode(SHOWROTARY);
     }
 
     // hold the increment were gonna move by
@@ -1661,7 +1697,7 @@ void updateControl() {
       rp_move = 1;
 
       // show rotary UP
-      pixel_counter = 5;
+      // pixel_counter = 5;
       pixel_flag = true;
     } else {
       // Otherwise B changedfirst and we're moving CCW
@@ -1669,23 +1705,25 @@ void updateControl() {
       rp_move = -1;
 
       // show rotary DOWN
-      pixel_counter = 3;
+      // pixel_counter = 3;
       pixel_flag = false;
     }
 
-    // if(rp_move != last_rp_move){
+    if(rp_move != last_rp_move){
 
-    //   unsigned long now = mozziMicros();
-    //   if(now - last_rotary_debounce_time < ROTARY_DEBOUNCE_DELAY){
-    //     // block rp_move if we're trying to reverse direction and its been less than 32ms since last move
-    //     Serial.println("RP ALTER!");
-    //     rp_move = last_rp_move;
-    //     last_rotary_debounce_time = now;
+      unsigned long now = mozziMicros();
+      if( rotary_debounce_delay.ready() ){
+        // block rp_move if we're trying to reverse direction and its been less than 32ms since last move
+        Serial.println("RP ALTER!");
+        rp_move = last_rp_move;
+        
 
-    //   }
-    // }
+        rotary_debounce_delay.start( ROTARY_DEBOUNCE_DELAY );
 
-    // last_rp_move = rp_move;
+      }
+    }
+
+    last_rp_move = rp_move;
 
     // is option
     if(mode > SELECTOPTIONMODE){
@@ -1934,7 +1972,7 @@ void handleDisplay(){
     showVol();
   }
 
-  if(!button_state && display_mode != IDLE && mode < SELECTOPTIONMODE && mozziMicros() - display_idle_timer >= 3000000){
+  if(!button_state && display_mode != IDLE && mode < SELECTOPTIONMODE && display_idle_delay.ready() ){
     // go back after 2s if button not held
     setDisplayMode(IDLE);
     // Serial.println(F("Set IDLE again."));
@@ -1943,7 +1981,7 @@ void handleDisplay(){
 
 void writeDisplay(){
 // set neopixel
-  unsigned long now = mozziMicros();
+  // unsigned long now = mozziMicros();
   // if(now - pixel_timer >= PIXDELAY){
 
   if(mode == SETTEMPOMODE || pixdelay.ready()){
@@ -1988,23 +2026,31 @@ bool colorCloseEnough(byte color, byte destColor){
   return inRange(destColor-4, destColor+4, color);
 }
 
-void showWeird(){
-  if(buffer_amount >= 0){
-
-    // x3 so its just one loop to 255 each rgb
-    byte numlights = floor(buffer_amount/16);
-    // Serial.print(F("Numlights is "));
-    // Serial.println(numlights);
-    for(byte i=0; i<21; i++){
-        
-      if(i<numlights){
-        pixel_colors[i] = 255;
-      } else {
-        pixel_colors[i] = 0;
-      }
-    }
-
+void showIntro(){
+  for(byte i=1; i<NUMPIXELS; i++){
+    pixel_colors[i*3] = 0;
+    pixel_colors[i*3+1] = 0;
+    pixel_colors[i*3+2] = 200;
   }
+}
+
+void showWeird(){
+//   if(buffer_amount >= 0){
+
+//     // x3 so its just one loop to 255 each rgb
+//     byte numlights = floor(buffer_amount/16);
+//     // Serial.print(F("Numlights is "));
+//     // Serial.println(numlights);
+//     for(byte i=0; i<21; i++){
+        
+//       if(i<numlights){
+//         pixel_colors[i] = 255;
+//       } else {
+//         pixel_colors[i] = 0;
+//       }
+//     }
+
+//   }
 }
 
 void showPlay(){
@@ -2121,36 +2167,51 @@ void displayPlayNote(byte note_index){
 }
 
 void showRotary(){
-
-  unsigned long now = mozziMicros();
-  if(now - display_aux_timer > 32000){
-    if(pixel_colors[pixel_counter] == 0){
-      pixel_colors[pixel_counter] = 255;
-    }
-
-    if(pixel_flag){
-      // light current one up
-      pixel_counter += 3;
-      if(pixel_counter == 21){
-        pixel_counter = 5;
-      }
-    } else {
-
-      if(pixel_counter-3 > 3){
-        pixel_counter -= 3;
-      } else {
-        pixel_counter = 18;
-      }
-    }
-
-    display_aux_timer = now;
+  if(pixel_flag){
+    pixel_colors[9] = 0;
+    pixel_colors[10] = 200;
+    pixel_colors[11] = 0;
+    pixel_colors[12] = 10;
+    pixel_colors[13] = 10;
+    pixel_colors[14] = 10;    
+  } else {
+    pixel_colors[6] = 200;
+    pixel_colors[7] = 0;
+    pixel_colors[8] = 0;
+    pixel_colors[9] = 10;
+    pixel_colors[10] = 10;
+    pixel_colors[11] = 10;
   }
 
-  for(byte i=3; i<21; i++){
-    if(pixel_colors[i] > 0){
-      pixel_colors[i] = pixel_colors[i]-17;
-    }
-  }
+//   unsigned long now = mozziMicros();
+//   if(now - display_aux_timer > 32000){
+//     if(pixel_colors[pixel_counter] == 0){
+//       pixel_colors[pixel_counter] = 255;
+//     }
+
+//     if(pixel_flag){
+//       // light current one up
+//       pixel_counter += 3;
+//       if(pixel_counter == 21){
+//         pixel_counter = 5;
+//       }
+//     } else {
+
+//       if(pixel_counter-3 > 3){
+//         pixel_counter -= 3;
+//       } else {
+//         pixel_counter = 18;
+//       }
+//     }
+
+//     display_aux_timer = now;
+//   }
+
+//   for(byte i=3; i<21; i++){
+//     if(pixel_colors[i] > 0){
+//       pixel_colors[i] = pixel_colors[i]-17;
+//     }
+//   }
 }
 
 void showSelectOption(){
@@ -2253,9 +2314,7 @@ void showRotate(){
   //   pixel_colors[i*3+2] = i * 17;
   // }
   // return;
-  unsigned long now = mozziMicros();
-  if(now - display_aux_timer >= 160000){
-    display_aux_timer = now;
+  if( display_aux_delay.ready() ){
 
     for(byte i=1; i<NUMPIXELS; i++){
       if(pixel_counter == i || pixel_counter == i+1 || pixel_counter == 1 && i==6 ){
@@ -2274,6 +2333,8 @@ void showRotate(){
     if(pixel_counter > 6){
       pixel_counter = 1;
     }
+
+    display_aux_delay.start(160);
   }
 }
 
@@ -2286,9 +2347,7 @@ void showLoading(){
   //     pixel_colors[pixel_counter*3+i] -= 5;
   //   }
   // }
-  unsigned long now = mozziMicros();
-  if(now - display_aux_timer >= 1000){
-    display_aux_timer = now;
+  if( display_aux_delay.ready() ){
 
     byte second_pix = pixel_counter + 2;
     byte third_pix = pixel_counter + 4;
@@ -2328,13 +2387,13 @@ void showLoading(){
     if(pixel_counter == NUMPIXELS){
       pixel_counter = 0;
     }
+
+    display_aux_delay.start(10);
   }
 }
 
 void showIdle(){
-  unsigned long now = mozziMicros();
-  if(now - display_aux_timer >= 40000){
-    display_aux_timer = now;
+  if( display_aux_delay.ready() ){
     
     byte choice = rand() % 21;
     if(pixel_colors[choice] < 10){
@@ -2342,6 +2401,8 @@ void showIdle(){
     } else {
       pixel_colors[choice] = 0;
     }
+
+    display_aux_delay.start(40);
   }
 }
 
