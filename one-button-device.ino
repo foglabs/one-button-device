@@ -35,7 +35,7 @@ Cancel button?
 
 // effects stuff
 #include <LowPassFilter.h>
-#include <AudioDelay.h>
+// #include <AudioDelay.h>
 // #include <ReverbTank.h>
 // #include <Phasor.h>
 
@@ -162,8 +162,9 @@ Oscil <8192, AUDIO_RATE> aSin3(SIN8192_DATA);
 Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aVibrato(COS2048_DATA);
 
 // deelay
-int delayTime = 2400;
-int delayBuffer[120];
+#define DELAY_BUFFER_LENGTH 128
+int delayIndex = 0;
+int delayBuffer[DELAY_BUFFER_LENGTH];
 
 // ReverbTank reverb;
 
@@ -488,7 +489,8 @@ int8_t rotary_position = 12;
 int8_t last_rp_move = 0;
 // rotarys a pin reading
 bool last_a;
-bool clockwise = false;
+// know whether to fade down in showrotary
+bool rotaryMoved = false;
 // unsigned long last_rotary_debounce_time = mozziMicros();
 
 #define ROTARY_DEBOUNCE_DELAY 32
@@ -1210,19 +1212,22 @@ void set_effects() {
 #define SLOPE -2.0
 // #define SOFTSLOPEFACTOR -1.0/6.0;
 
-// int render_delay(int signal){
-//   if(delay_delay.ready()){
-//     delayIndex[]
-//     // delayBuffer[100] = 100;
-//     // return delayBuffer[100];  
-//     if(delayIndex == 256){
-//       delayIndex = 0
-//     }
+int render_delay(int signal){
+  // get old sample to play back (if avail)
+  int toPlay = delayBuffer[delayIndex];
 
-//     return delayBuffer[delayIndex];
-//   }
-  
-// }
+  // store new sample at same index (gets played next time around bbuffer)
+  delayBuffer[delayIndex] = signal;
+
+  // increment for next tick
+  delayIndex++;
+  if(delayIndex == DELAY_BUFFER_LENGTH){
+    delayIndex = 0;
+  }
+
+  // play whatever is in the buffer at delayIndex 
+  return toPlay>>4;
+}
 
 int render_compressor(int signal){
 
@@ -1265,9 +1270,9 @@ int render_effects(int signal) {
   //   signal = signal + aDel.next((int8_t)signal, 512);
   // }
 
-  // if(delay_enabled()){
-  //   signal = signal + render_delay(signal);
-  // }
+  if(delay_enabled()){
+    signal = signal + render_delay(signal);
+  }
 
   // if(waveshaper_enabled()){
   //   // float max = 20;
@@ -1632,6 +1637,11 @@ void setDisplayMode(byte dispMode){
   } else if(dispMode == SHOWROTARY){
     // zeroOutDisplay = true;
     // Serial.println(F("I started showrotarymode"));
+    
+    // reset this so we know when to fade down
+    rotaryMoved = false;
+    pixel_colors[20] = 255;
+
   } else if(dispMode == SHOWCHORDSCHEMA){
     zeroOutDisplay = true;
     // Serial.println(F("I started showchordschemamode"));
@@ -1970,6 +1980,8 @@ void handleDisplay(){
     showFilter();
   } else if(display_mode == SHOWVOL){
     showVol();
+  } else if(display_mode == SHOWINTRO){
+    showIntro();
   }
 
   if(!button_state && display_mode != IDLE && mode < SELECTOPTIONMODE && display_idle_delay.ready() ){
@@ -2027,11 +2039,13 @@ bool colorCloseEnough(byte color, byte destColor){
 }
 
 void showIntro(){
-  for(byte i=1; i<NUMPIXELS; i++){
-    pixel_colors[i*3] = 0;
-    pixel_colors[i*3+1] = 0;
-    pixel_colors[i*3+2] = 200;
-  }
+  // for(byte i=1; i<NUMPIXELS; i++){
+  //   pixel_colors[i*3] = 0;
+  //   pixel_colors[i*3+1] = 0;
+  //   pixel_colors[i*3+2] = 200;
+  // }
+
+  pixel_colors[0] = 200;
 }
 
 void showWeird(){
@@ -2167,22 +2181,33 @@ void displayPlayNote(byte note_index){
 }
 
 void showRotary(){
-  if(pixel_flag){
-    pixel_colors[9] = 0;
-    pixel_colors[10] = 200;
-    pixel_colors[11] = 0;
-    pixel_colors[12] = 10;
-    pixel_colors[13] = 10;
-    pixel_colors[14] = 10;    
-  } else {
-    pixel_colors[6] = 200;
-    pixel_colors[7] = 0;
-    pixel_colors[8] = 0;
-    pixel_colors[9] = 10;
-    pixel_colors[10] = 10;
-    pixel_colors[11] = 10;
-  }
+  if(!rotaryMoved){
+    if(pixel_flag){
+      pixel_colors[6] = 10;
+      pixel_colors[7] = 10;
+      pixel_colors[8] = 10;
+      pixel_colors[9] = 0;
+      pixel_colors[10] = 200;
+      pixel_colors[11] = 0;
+    } else {
+      pixel_colors[6] = 200;
+      pixel_colors[7] = 0;
+      pixel_colors[8] = 0;
+      pixel_colors[9] = 10;
+      pixel_colors[10] = 10;
+      pixel_colors[11] = 10;
+    }
 
+    rotaryMoved = true;
+  } else {
+
+    for(byte i=6; i<12; i++){
+      if(pixel_colors[i]>0){
+        pixel_colors[i]--;
+      }
+    }
+  }
+  
 //   unsigned long now = mozziMicros();
 //   if(now - display_aux_timer > 32000){
 //     if(pixel_colors[pixel_counter] == 0){
