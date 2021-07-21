@@ -513,8 +513,13 @@ bool last_a = digitalRead(ROTARY_A_PIN);
 // know whether to fade down in showrotary
 bool rotaryMoved = false;
 
-#define ROTARY_DEBOUNCE_DELAY 32
-unsigned long rotary_debounce_timer = mozziMicros();
+// on adafruit encoder, one 'click' == two moves
+// this is not a bounce from interference because if you hold it between clicks it makes one move
+// so wait for two moves before making one
+byte rotaryState = 0;
+
+// #define ROTARY_DEBOUNCE_DELAY 10000
+// unsigned long rotary_debounce_timer = mozziMicros();
 // EventDelay rotary_debounce_delay = EventDelay(ROTARY_DEBOUNCE_DELAY);
 // #define ROTARY_FUCKUP_DELAY 32000
 
@@ -1779,6 +1784,9 @@ void updateControl() {
       pixel_flag = false;
     }
 
+    // heat up to avoid double moves
+    rotaryState += 1;
+
     // either way show rotary
     if(mode < SELECTOPTIONMODE && (display_mode != SHOWROTARY || rp_move != last_rp_move) && introDelay.ready() ){
       setDisplayMode(SHOWROTARY);
@@ -1824,11 +1832,13 @@ void updateControl() {
 
       }
 
-    } else if(rotary_position + rp_move > -127 && rotary_position + rp_move < 127 && mode <= SELECTOPTIONMODE){
+    } else if(rotaryState == 2 && rotary_position + rp_move > -127 && rotary_position + rp_move < 127 && mode <= SELECTOPTIONMODE){
       // need rp to move to select an option!
 
       // is regular
       rotary_position += rp_move;
+
+      rotaryState = 0;
         
       // Serial.print(F("Rotary postition is "));
       // Serial.println(rotary_position);
@@ -1867,8 +1877,10 @@ void updateControl() {
     }
   
     setup_envelopes( envelope_mode );
+
+    // only set this when 
+    last_env_toggle = this_env_toggle;
   }
-  last_env_toggle = this_env_toggle;
 
   if(mode == ARPMODE && play_continuing){
     // keep playin that arp
@@ -2090,7 +2102,7 @@ void writeDisplay(){
     }
 
     // use the pix timer to write to the button as well
-    handleArcadeButton();
+    // handleArcadeButton();
 
     // pixel_timer = now;
     pixdelay.start(PIXDELAY);
