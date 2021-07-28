@@ -48,7 +48,7 @@ Cancel button?
 #include <Adafruit_NeoPixel.h>
 #define NUMPIXELS 7
 #define PIXELPIN 13
-#define PIXDELAY 100
+#define PIXDELAY 32
 // #define NUMPIXFADESTEPS 160.0
 
 // its modes luv
@@ -471,9 +471,6 @@ uint8_t repeat_notes[4] = {0,0,0,0};
 // for each chord
 // EventDelay chord_delay = EventDelay(1300);
 
-
-
-
 // long rando;
 
 // button stuff
@@ -517,6 +514,7 @@ bool rotaryMoved = false;
 // this is not a bounce from interference because if you hold it between clicks it makes one move
 // so wait for two moves before making one
 byte rotaryState = 0;
+EventDelay rotaryStateDelay = EventDelay(20);
 
 // #define ROTARY_DEBOUNCE_DELAY 10000
 // unsigned long rotary_debounce_timer = mozziMicros();
@@ -706,10 +704,10 @@ void set_sweep_freq(){
 
 void handle_rotary_button(){
 
-  // goes low when pressed
-  bool readin = !digitalRead(ROTARY_BUTTON_PIN);
-
   if( last_rbdebounce_delay.ready() ){
+
+    // goes low when pressed
+    bool readin = !digitalRead(ROTARY_BUTTON_PIN);
 
     // doing stuff after debounce
 
@@ -727,7 +725,7 @@ void handle_rotary_button(){
         rb_hold_once = true;
         // Serial.println(F("Set hold timer."));
       } else {
-        // button released
+        // rb released
 
         if(button_state && mode == CHORDSCHEMAMODE){
 
@@ -770,7 +768,7 @@ void handle_rotary_button(){
   }
 
   if(rbstate && rb_hold_once && rb_hold_delay.ready() ){
-    // Serial.print(F("LASMODE HELLO "));
+    // Serial.print(F("LASMODEHELLO "));
     // Serial.println(lastMode);
     
     if(mode < SELECTOPTIONMODE){
@@ -842,13 +840,13 @@ void handle_note_button(){
           play_note(72 + rotary_position, 0, available_slot);
         } else if(mode == ARPMODE){
           play_continuing = PLAYING;
-        } else if(mode == WEIRDMODE){
+        // } else if(mode == WEIRDMODE){
 
-          // do some ol other shit
-          start_play_weird();
+        //   // do some ol other shit
+        //   start_play_weird();
           
-          // show buffer fill on pixel now tghat were playing
-          setDisplayMode(WEIRD);
+        //   // show buffer fill on pixel now tghat were playing
+        //   setDisplayMode(WEIRD);
 
         } else if(mode == CHORDMODE){
 
@@ -872,9 +870,7 @@ void handle_note_button(){
         } else if(mode == REPEATMODE){
 
           // Serial.println(F("Playing Repeat"));
-
-          int8_t note = 72 + rotary_position;
-          play_note(note, getArpTime(envelope_mode), available_slot);
+          play_note(72 + rotary_position, getArpTime(envelope_mode), available_slot);
           setRepeatNote(note);
 
         } else if(mode == BEAUTYMODE){
@@ -932,8 +928,6 @@ void handle_note_button(){
 
           // dont go back to idle if were tapping
           display_idle_delay.start( IDLEDELAY );
-        } else {
-          // something
         }
         
       } else if(!button_state) {
@@ -943,13 +937,7 @@ void handle_note_button(){
         // chord root held is set in play_seq_chord
         current_note = -1;
 
-        // stop playing weird
-        if(mode == WEIRDMODE){
-          // do some ol other shit
-          // stop_play_weird();
-          // start waiting to playback buffer
-          // buffdelay.start(2000);
-        } else if(mode == CHORDMODE || mode == CHORDSCHEMAMODE){
+        if(mode == CHORDMODE || mode == CHORDSCHEMAMODE){
           for(byte i=0; i<4; i++){
             // start noteoffs because button was released
             notes[i]->note_off();
@@ -1216,7 +1204,6 @@ bool vibrato_enabled(){
 }
 
 void set_effects() {
-  // YOOO limited to two toggles on the rough build
   for(byte i=0; i<3; i++){
     // bool newtoggle =!digitalRead(i+3);
     // if(newtoggle != toggles[i]){
@@ -1757,6 +1744,12 @@ void setDisplayMode(byte dispMode){
 
 void updateControl() {
 
+
+  if( rotaryState == 1 && rotaryStateDelay.ready() ){
+    // we got stuck on rs1 for 30ms... dangit! so reset
+    rotaryState = 0;
+  }
+
   bool aVal = digitalRead(ROTARY_A_PIN);
   bool bVal = digitalRead(ROTARY_B_PIN);
   if( aVal != last_a ){
@@ -1786,6 +1779,11 @@ void updateControl() {
 
     // heat up to avoid double moves
     rotaryState += 1;
+
+    if(rotaryState == 1){
+      // we just hit rs1, start a timer in case we get stuck here D:
+      rotaryStateDelay.start(20);
+    }
 
     // either way show rotary
     if(mode < SELECTOPTIONMODE && (display_mode != SHOWROTARY || rp_move != last_rp_move) && introDelay.ready() ){
@@ -1907,8 +1905,6 @@ void updateControl() {
         notes[i]->set_available(true);
       }
 
-    } else if(mode == CHORDMODE){
-      // bazwah?!
     } else if(mode == ARPMODE) {
       
       if(note_delays[i]->ready()){
@@ -1917,8 +1913,6 @@ void updateControl() {
         displayPlayNotes[i] = false;
       }
 
-    } else if(mode == WEIRDMODE){
-      // set above
     } else if(mode == SWEEPMODE){
       // wait 2ms to change sweep freq
       //  oops 200 is 2 microseconds
@@ -2084,27 +2078,24 @@ void writeDisplay(){
     handleDisplay();
 
     pixel.clear();
-    byte pixcolorindex = 0;
     for(byte i=0; i<NUMPIXELS; i++) {
       // uint8_t r = rand() % 6;
       // uint8_t g = rand() % 6;
       // uint8_t b = rand() % 6;
-      pixcolorindex = i * 3;
       // Serial.print("Setting pix to ");
       // Serial.print(pixel_colors[pixcolorindex]);
       // Serial.print(" ");
       // Serial.print(pixel_colors[pixcolorindex+1]);
       // Serial.print(" ");
       // Serial.println(pixel_colors[pixcolorindex+2]);
-      pixel.setPixelColor( i, pixel.Color(pixel_colors[pixcolorindex], pixel_colors[pixcolorindex+1], pixel_colors[pixcolorindex+2]) );
-
-      pixel.show();
+        pixel.setPixelColor( i, pixel.Color(pixel_colors[(i * 3)], pixel_colors[(i * 3)+1], pixel_colors[(i * 3)+2]) );
     }
 
     // use the pix timer to write to the button as well
-    // handleArcadeButton();
+    handleArcadeButton();
 
     // pixel_timer = now;
+    pixel.show();
     pixdelay.start(PIXDELAY);
   }
 }
@@ -2257,9 +2248,9 @@ void displayPlayNote(byte note_index){
   // Serial.print(F("Setting pix at "));
   // Serial.println(pixcolorindex);
 
-  pixel_colors[pixcolorindex] = rand() % 8;
-  pixel_colors[pixcolorindex+1] = rand() % 4;
-  pixel_colors[pixcolorindex+2] = rand() % 16;
+  pixel_colors[pixcolorindex] = 8;
+  pixel_colors[pixcolorindex+1] = 4;
+  pixel_colors[pixcolorindex+2] = 16;
   // pixel_colors[pixcolorindex] = mode * 12;
   // pixel_colors[pixcolorindex+1] = 64 / mode;
   // pixel_colors[pixcolorindex+2] = 128 - (mode * 12);
@@ -2913,7 +2904,7 @@ int updateAudio(){
 
         // quiet these boys down a bit, 0 is root, make successive Notes in chord a little quieter
         sig += (int) notes[i]->env_next() * ( (next_sample * (1/i+1) ) >> 2);
-        // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i^2) * 0.89)  );
+        // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i^2) * 0.89)  ); 
       } else if(mode == BEAUTYMODE){
 
         // yikes
@@ -2943,13 +2934,13 @@ int updateAudio(){
 
   // set volume
   // Serial.println(sig);
-  sig = (int) (sig * volume)>>8;
+  // sig = (int) (sig * volume)>>8;
   // Serial.println(sig);
 
   // really fucks up the audio
-  // bigButtonBrightness = abs(sig);
+  bigButtonBrightness = abs(sig);
 
-  return (int) lpf.next ( sig );
+  return (int) lpf.next ( (int) (sig * volume)>>8 );
 }
 
 void loop(){

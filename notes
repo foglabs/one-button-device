@@ -285,18 +285,6 @@ fix sweepmode envelope
   think I did?
 
 
-0
-
-1
-
-2
-
-3
-
-4
-
-5
-
 
 KURE-MAN
 Xenophone
@@ -305,9 +293,18 @@ Xenophone
 sounds like shit
   audible click every time pixel is updated
     put 1000uF cap across jewels power pins
+    no change
+    470 resistor - no discernble change - code?
+
   
   higher control rate seems to cause problems?
     maybe not
+
+clearing/setting pixel too many times was increasing..
+  pixdealy of 32 seems to fit in reasonably well with audio
+
+  +++ try out lower cutoff in hard lpf 
+
 
 
 
