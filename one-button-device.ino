@@ -514,7 +514,6 @@ bool rotaryMoved = false;
 // this is not a bounce from interference because if you hold it between clicks it makes one move
 // so wait for two moves before making one
 byte rotaryState = 0;
-EventDelay rotaryStateDelay = EventDelay(20);
 
 // #define ROTARY_DEBOUNCE_DELAY 10000
 // unsigned long rotary_debounce_timer = mozziMicros();
@@ -779,6 +778,7 @@ void handle_rotary_button(){
       setup_mode(SELECTOPTIONMODE);
       setDisplayMode(SHOWSELECT);
       // Serial.println(F("Set freakin selectoptionmode"));
+
     } else if(lastMode >= 0){
       // if already in settempo, switch back to prev mode
       // Serial.println(F("All lastmode baby"));
@@ -790,6 +790,8 @@ void handle_rotary_button(){
     }
 
     rb_hold_once = false;
+    // dont want to lose trakc of this!
+    rotaryState = 0;
   }
 
 }
@@ -871,7 +873,7 @@ void handle_note_button(){
 
           // Serial.println(F("Playing Repeat"));
           play_note(72 + rotary_position, getArpTime(envelope_mode), available_slot);
-          setRepeatNote(note);
+          setRepeatNote(72 + rotary_position);
 
         } else if(mode == BEAUTYMODE){
           // kind of violinish
@@ -1743,13 +1745,6 @@ void setDisplayMode(byte dispMode){
 }
 
 void updateControl() {
-
-
-  if( rotaryState == 1 && rotaryStateDelay.ready() ){
-    // we got stuck on rs1 for 30ms... dangit! so reset
-    rotaryState = 0;
-  }
-
   bool aVal = digitalRead(ROTARY_A_PIN);
   bool bVal = digitalRead(ROTARY_B_PIN);
   if( aVal != last_a ){
@@ -1779,11 +1774,6 @@ void updateControl() {
 
     // heat up to avoid double moves
     rotaryState += 1;
-
-    if(rotaryState == 1){
-      // we just hit rs1, start a timer in case we get stuck here D:
-      rotaryStateDelay.start(20);
-    }
 
     // either way show rotary
     if(mode < SELECTOPTIONMODE && (display_mode != SHOWROTARY || rp_move != last_rp_move) && introDelay.ready() ){
