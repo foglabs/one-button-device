@@ -280,6 +280,7 @@ class Note {
 
     float freq;
     byte osc_index;
+    byte currentNote;
   public:
     Note(byte, int);
     // for now just freq
@@ -298,6 +299,8 @@ class Note {
     // int osc_phmod_next(Q15n16);
     unsigned int env_next();
     byte get_osc_index();
+    void store_note(byte);
+    byte get_note();
 };
 
 Note::Note(byte init_osc_index, int init_freq){
@@ -316,6 +319,18 @@ Note::Note(byte init_osc_index, int init_freq){
       aSin3.setFreq(init_freq);
     }
   }
+}
+
+void Note::store_note(byte newNote){
+  // midi note #
+  if(newNote>=0 && newNote<128){
+    currentNote = newNote;
+  }
+}
+
+byte Note::get_note(){
+  // midi note
+  return currentNote;
 }
 
 bool Note::is_playing(){
@@ -544,14 +559,16 @@ byte available_note_slot(){
   return 0;
 }
 
-void play_note(int new_note, unsigned int delay_time, uint8_t available_slot){
+void play_note(byte new_note, unsigned int delay_time, uint8_t available_slot){
 
   // Serial.println(F("NOTE IS"));
   // Serial.println(new_note);
-  float freq = note_to_freq(new_note);
+  // float freq = note_to_freq(new_note);
   // Serial.println("FREQ IS");
   // Serial.println(freq);
-  notes[available_slot]->set_frequency( (float) freq + detune );
+  notes[available_slot]->set_frequency( (float) note_to_freq(new_note) + detune );
+  // save which midi note
+  notes[available_slot]->store_note(new_note);
 
   if(mode == REGNOTEMODE || mode == REPEATMODE || mode == SETFILTERMODE || mode == SETVOLMODE){
     // this is the which notes[i] slot were playing from in regular mode
@@ -1744,6 +1761,19 @@ void setDisplayMode(byte dispMode){
   display_mode = dispMode;
 }
 
+void updatePlayingNotes(byte rpMove){
+  for(byte i=0; i<4; i++){
+    if( notes[i]->is_playing() ){
+      // if its playing, change it by rpmove semitones
+      byte newNote = notes[i]->get_note() + rpMove;
+      // acutally change freq
+      notes[i]->set_frequency( note_to_freq( newNote ) );
+      // record for next moves :)
+      notes[i]->store_note(newNote);
+    }
+  }
+}
+
 void updateControl() {
   bool aVal = digitalRead(ROTARY_A_PIN);
   bool bVal = digitalRead(ROTARY_B_PIN);
@@ -1758,7 +1788,6 @@ void updateControl() {
 
       // Means pin A Changed first -We're RotatingClockwise.
       // Serial.println(F("CCW"));
-
       rp_move = 1;
 
       // show rotary UP
@@ -1825,6 +1854,9 @@ void updateControl() {
 
       // is regular
       rotary_position += rp_move;
+
+      // change currently playing freqs
+      updatePlayingNotes(rp_move);
 
       rotaryState = 0;
         
