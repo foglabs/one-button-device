@@ -638,6 +638,68 @@ float note_to_freq(int midi_note){
 //   }
 // }
 
+
+
+// default
+//   add rotary position for true offset
+// modelock
+//   currently were not in a 'key'
+
+//   if you could lock root note
+//     (need a separate way to change root note)
+
+//     you can change knob to set starting note
+//       if lockmode
+//         when change rotary_position, change rp_move to adjacent harmonicmodeoffset value
+//         that way you only make legal moves iwthin the current key
+
+//     you can change mode to set intervals
+
+
+void safeRotaryChange(int8_t change){
+  // change might be negative! so only add
+  if(rotary_position+change < 128 && rotary_position+change>-128){
+    rotary_position += change;
+  }
+}
+
+int8_t moveRotaryWithinScale(int8_t direction){
+  int8_t change = 0;
+  if(direction > 0){
+
+    // if going up, use the CURRENT arp inde xto get move size
+    change = harmonicModeIntervals[arp_note_index];
+    if(change == 0){
+      // go up to 'root'
+      change = 1;
+    }
+
+    // up
+    if(arp_note_index+1 > 7){
+      arp_note_index = 0;
+    } else {
+      arp_note_index += 1;
+    }
+
+  } else {
+    // if going down, switch arp index FIRST, then use the fucking interval to move down
+    if(arp_note_index-1<0){
+      arp_note_index = 7;
+    } else {
+      arp_note_index -= 1;
+    }
+
+    change = harmonicModeIntervals[arp_note_index];
+    if(change == 0){
+      // go down to 'root'
+      change = 2;
+    }
+  }
+
+  // return offset to get to note we moved to
+  return direction * change;
+}
+
 byte next_arp_note(){
   return 72 + rotary_position + getHarmonicModeOffset(arp_note_index);
 }
@@ -973,6 +1035,8 @@ void handle_note_button(){
             note_delays[i]->start( getReleaseTime(envelope_mode) );
             displayPlayNotes[i] = false;
           }
+        } else if(mode == ARPMODE){
+          arp_note_index = harmonicMode;
         }
 
         play_continuing = TAILING;
@@ -1401,7 +1465,7 @@ void setup(){
   // seed dat
   // randomSeed(analogRead(0));
 
-  // Serial.begin(9600);
+  Serial.begin(9600);
   startMozzi(CONTROL_RATE); // :)
   note0 = Note(0, 0);
   note1 = Note(1, 0);
@@ -1849,11 +1913,16 @@ void updateControl() {
 
       }
 
-    } else if(rotaryState == 2 && rotary_position + rp_move > -127 && rotary_position + rp_move < 127 && mode <= SELECTOPTIONMODE){
+    } else if(rotaryState == 2 && mode <= SELECTOPTIONMODE){
       // need rp to move to select an option!
 
-      // is regular
-      rotary_position += rp_move;
+      if(mode == ARPMODE){
+        // can add other flag later for disabling keylock
+        safeRotaryChange( moveRotaryWithinScale(rp_move) );
+      } else {
+        // is regular
+        safeRotaryChange(rp_move);
+      }
 
       // change currently playing freqs
       updatePlayingNotes(rp_move);
