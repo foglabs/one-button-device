@@ -307,9 +307,11 @@ clearing/setting pixel too many times was increasing..
 
 
 
--rotary in arp mode keeps you within scale instead of reg transpose
+*-rotary in arp mode keeps you within scale instead of reg transpose
 *-regnote mode knob changes reflected instantly
 
+
+-store config settings in progmem
 
 
 

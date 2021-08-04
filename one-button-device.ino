@@ -28,6 +28,8 @@ Cancel button?
 
 */
 
+// #include <>
+
 #include <MozziGuts.h>
 #include <EventDelay.h>
 #include <Oscil.h> // oscillator template
@@ -111,7 +113,7 @@ Cancel button?
 #define OPTION4COLOR_B 242
 
 
-
+bool keylock = false;
 
 
 #define INTRODELAY 1618
@@ -983,10 +985,19 @@ void handle_note_button(){
           play_note(115 + rotary_position, false, 3);
         } else if(mode == SELECTOPTIONMODE){
           // pressed button, so select mode based on rotary position % 3
-          byte optionMode = abs(rotary_position) % 5 + 9;
+          byte optionMode = abs(rotary_position) % 6 + 9;
           // Serial.print(F("I have selected option "));
           // Serial.println(optionMode);
-          setup_mode( optionMode );
+          
+          // last light is actually a toggle
+          Serial.print("omode is ");
+          Serial.println(optionMode);
+          if(optionMode == 14){
+            keylock = !keylock;
+          } else {
+            setup_mode( optionMode );
+
+          }
         } else if(mode == SETTEMPOMODE){
           // use button pushes to set tempo
 
@@ -1916,7 +1927,7 @@ void updateControl() {
     } else if(rotaryState == 2 && mode <= SELECTOPTIONMODE){
       // need rp to move to select an option!
 
-      if(mode == ARPMODE){
+      if(keylock){
         // can add other flag later for disabling keylock
         safeRotaryChange( moveRotaryWithinScale(rp_move) );
       } else {
@@ -2397,7 +2408,7 @@ void showRotary(){
 }
 
 void showSelectOption(){
-  byte selected = abs(rotary_position) % 5;
+  byte selected = abs(rotary_position) % 6;
   for(byte i=1; i<NUMPIXELS; i++){
 
     byte brightness;
@@ -2431,6 +2442,19 @@ void showSelectOption(){
       pixel_colors[i*3] = OPTION4COLOR_R/brightness;
       pixel_colors[i*3+1] = OPTION4COLOR_G/brightness;
       pixel_colors[i*3+2] = OPTION4COLOR_B/brightness;
+    } else if(i == 6) {
+      brightness = selected == 5 ? 1 : 16;
+      // 56
+      if(keylock){
+        pixel_colors[i*3] = 130/brightness;
+        pixel_colors[i*3+1] = 20/brightness;
+        pixel_colors[i*3+2] = 0/brightness; 
+      } else {
+        pixel_colors[i*3] = 16/brightness;
+        pixel_colors[i*3+1] = 16/brightness;
+        pixel_colors[i*3+2] = 16/brightness;
+      }
+      
     } else {
       pixel_colors[i*3] = 0;
       pixel_colors[i*3+1] = 0;
