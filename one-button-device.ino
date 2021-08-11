@@ -1,5 +1,4 @@
 /*  Get it innnnnn one button device
-
 controls
   -rotary
     reg note -> change semitone for *next* note
@@ -17,10 +16,7 @@ controls
         begin playing at current frequency
         begin recording into buffer
 
-
   -toggle switches
-
-
   -display
 
 
@@ -28,7 +24,24 @@ Cancel button?
 
 */
 
-// #include <>
+#include <EEPROM.h>
+#define SETTINGS_ADDRESS 0
+
+// 0 tempo
+// 1 detune
+// 2 keylock bool
+// 3 harmonicMode
+// 4 key
+// 5 mode
+// 6 chordschema
+
+
+// 3 delay not stored too big 
+// 2 volume not stored too float
+// 1 filter not stored too not stored currently
+
+// defaults
+// byte userSettings[] = { 88, 196, 0, 0, 0, 0, 0, 0 };
 
 #include <MozziGuts.h>
 #include <EventDelay.h>
@@ -115,7 +128,6 @@ Cancel button?
 
 bool keylock = false;
 
-
 #define INTRODELAY 1618
 EventDelay introDelay = EventDelay(INTRODELAY);
 
@@ -133,6 +145,8 @@ byte pixel_colors[21];
 // which arp shape
 byte harmonicMode = 0;
 const byte harmonicModeIntervals[] = { 0,2,2,1,2,2,2,1 };
+// this is goddamn fuckin major c bitch!
+byte key = 0;
 
 byte display_mode;
 byte pixel_counter = 0;
@@ -144,7 +158,7 @@ bool displayPlayNotes[4] = { false, false, false, false };
 byte buffer_amount = 0;
 byte brightness_factor = 1;
 
-unsigned int tempo = 88;
+byte tempo = 88;
 // we are in set tempo mode
 // a beat is happening right now
 bool onBeat = false;
@@ -254,7 +268,7 @@ int8_t current_note = 0;
 byte chord_schema = 0;
 
 // set via setup_mode in setup()
-int8_t mode = REGNOTEMODE;
+byte mode = REGNOTEMODE;
 int8_t lastMode = -1;
 // modes with lots of voices need to be SHUT UP
 bool dimThisMode = false;
@@ -657,6 +671,46 @@ float note_to_freq(int midi_note){
 
 //     you can change mode to set intervals
 
+void saveSettings(){
+  // for(byte i=0; i<7; i++){
+  //   // save each thing in settings into eeprom beeetch!
+  //   EEPROM.put(SETTINGS_ADDRESS+i, userSettings[i])
+  // }
+  EEPROM.write(SETTINGS_ADDRESS, tempo);
+  EEPROM.write(SETTINGS_ADDRESS+1, detune);
+  EEPROM.write(SETTINGS_ADDRESS+2, keylock);
+  EEPROM.write(SETTINGS_ADDRESS+3, harmonicMode);
+  EEPROM.write(SETTINGS_ADDRESS+4, key);
+  // this is lastmode because the save happens during selectoptionmode
+  EEPROM.write(SETTINGS_ADDRESS+5, lastMode);
+  EEPROM.write(SETTINGS_ADDRESS+6, chord_schema);
+}
+
+void readSettings(){
+  byte tempoCheck;
+  EEPROM.get(SETTINGS_ADDRESS, tempoCheck);
+  // Serial.print("Fucking got stupid ");
+  // Serial.println(tempoCheck);
+  if(tempoCheck > 0){
+    tempo = tempoCheck;
+    EEPROM.get(SETTINGS_ADDRESS+1, detune);
+    EEPROM.get(SETTINGS_ADDRESS+2, keylock);
+    EEPROM.get(SETTINGS_ADDRESS+3, harmonicMode);
+    EEPROM.get(SETTINGS_ADDRESS+4, key);
+    EEPROM.get(SETTINGS_ADDRESS+5, mode);
+    EEPROM.get(SETTINGS_ADDRESS+6, chord_schema);
+
+    // yeah baby
+    // setup_mode(mode);
+    // Serial.println(detune);
+    // Serial.println(keylock);
+    // Serial.println(harmonicMode);
+    // Serial.println(key);
+    // Serial.println(mode);
+    // Serial.println(chord_schema);
+
+  }  
+}
 
 void safeRotaryChange(int8_t change){
   // change might be negative! so only add
@@ -994,6 +1048,9 @@ void handle_note_button(){
           Serial.println(optionMode);
           if(optionMode == 14){
             keylock = !keylock;
+            Serial.println(F("Hey  bitch"));
+            // fuck it
+            saveSettings();
           } else {
             setup_mode( optionMode );
 
@@ -1419,8 +1476,13 @@ float get_slope(float y2, float x2, int y1, int x1){
 }
 
 void setup(){
+  // Serial.begin(9600);
+
   // start somewhere random in the 'random seq'
   randomSeed(analogRead(0));
+
+  // load settings from EEP <3 on startup
+  readSettings();
 
   // start up the neopix
   pixel.begin();
@@ -1476,7 +1538,6 @@ void setup(){
   // seed dat
   // randomSeed(analogRead(0));
 
-  Serial.begin(9600);
   startMozzi(CONTROL_RATE); // :)
   note0 = Note(0, 0);
   note1 = Note(1, 0);
@@ -1499,7 +1560,7 @@ void setup(){
   note_delays[3] = &event_delay3;
 
   // INITIAL MODEFOOL
-  setup_mode(REGNOTEMODE);
+  setup_mode(mode);
 
   setDisplayMode(SHOWINTRO);
   introDelay.start(INTRODELAY);
@@ -1928,7 +1989,6 @@ void updateControl() {
       // need rp to move to select an option!
 
       if(keylock){
-        // can add other flag later for disabling keylock
         safeRotaryChange( moveRotaryWithinScale(rp_move) );
       } else {
         // is regular
@@ -2786,7 +2846,7 @@ byte lerp(byte a, byte b, uint8_t u){
 //   }
 // }
 
-void showMode(int8_t mode){
+void showMode(byte mode){
   byte r = 200;
   byte g = 0;
   byte b = 0;

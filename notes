@@ -290,6 +290,10 @@ KURE-MAN
 Xenophone
 
 
+つまみ 
+摘み
+
+
 sounds like shit
   audible click every time pixel is updated
     put 1000uF cap across jewels power pins
@@ -312,6 +316,13 @@ clearing/setting pixel too many times was increasing..
 
 
 -store config settings in progmem
+  might not be feasible given how mozzi works
+
+-make sweep envelope hold forever
+
+-sweepplace mode
+  sweep to a change a voice frequency
+  holdpress (hold arcade + rb press) to start next voice
 
 
 
