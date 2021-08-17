@@ -21,11 +21,10 @@ controls
 
 
 Cancel button?
-
 */
 
-#include <EEPROM.h>
-#define SETTINGS_ADDRESS 0
+// #include <EEPROM.h>
+// #define SETTINGS_ADDRESS 0
 
 // 0 tempo
 // 1 detune
@@ -57,7 +56,7 @@ Cancel button?
 #define AUDIO_MODE STANDARD_PLUS
 #include <mozzi_midi.h>
 #include <tables/sin8192_int8.h> // sine table for oscillator
-#include <tables/cos2048_int8.h> // sine table for oscillator
+// #include <tables/cos2048_int8.h> // sine table for oscillator
 
 // da pix
 #include <Adafruit_NeoPixel.h>
@@ -150,19 +149,16 @@ byte key = 0;
 
 byte display_mode;
 byte pixel_counter = 0;
-byte pixel_counter2 = 0;
 bool pixel_flag = true;
 bool pixel_flag2 = true;
 
 bool displayPlayNotes[4] = { false, false, false, false };
-byte buffer_amount = 0;
-byte brightness_factor = 1;
 
 byte tempo = 88;
 // we are in set tempo mode
 // a beat is happening right now
 bool onBeat = false;
-// perhaps a beat happened once betforee
+// perhaps a beat happened once beforee
 bool lastOnBeat = false;
 // this is used to tell when we're on beat
 unsigned long setTempoTime;
@@ -187,7 +183,7 @@ Oscil <8192, AUDIO_RATE> aSin2(SIN8192_DATA);
 Oscil <8192, AUDIO_RATE> aSin3(SIN8192_DATA);
 
 // davibrato :D
-Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aVibrato(COS2048_DATA);
+// Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aVibrato(COS2048_DATA);
 
 // deelay
 #define DELAY_BUFFER_LENGTH 256
@@ -210,8 +206,6 @@ ADSR <AUDIO_RATE, AUDIO_RATE> envelope3;
 
 // Effects objects
 bool toggles[4] = {false,false,false,false};
-// toggle this based on inputs
-bool effects_active = false;
 
 // to know if we should reset enveleopes
 bool last_env_toggle = false;
@@ -245,14 +239,6 @@ byte play_continuing = STOPPED;
 bool buffer_empty = true;
 bool waiting_to_play_buffer = false;
 
-// int8_t buffer[BUFFER_LENGTH];
-// int8_t buffer[1];
-// byte buffcount = 0;
-// byte buffstepcount = 0;
-// EventDelay buffdelay = EventDelay(2000);
-// uint8_t bufferreplay = 0;
-// float slope = 0;
-
 // chordschemamode stuff
 #define MAJOR 0
 #define MINOR 1
@@ -273,7 +259,6 @@ int8_t lastMode = -1;
 // modes with lots of voices need to be SHUT UP
 bool dimThisMode = false;
 
-
 #define BIGBUTTONPIN 2
 #define BIGBUTTON_LED_PIN 10
 
@@ -285,7 +270,6 @@ bool dimThisMode = false;
 #define ROTARY_A_PIN 11
 #define ROTARY_B_PIN 12
 #define ROTARY_BUTTON_PIN 8
-
 
 // this class wraps oscillators, when they're intended to be used for notes
 // need to make sure resetting them works, causes weird mode will probably bypass this
@@ -447,19 +431,6 @@ int Note::osc_next(){
   }
 }
 
-// int Note::osc_phmod_next(Q15n16 phasemod_val){
-//   // modify that shit based on current control vals
-//   if(osc_index == 0){
-//     return (int)aSin0.phMod(phasemod_val);
-//   } else if(osc_index == 1){
-//     return (int)aSin1.phMod(phasemod_val);
-//   } else if(osc_index == 2){
-//     return (int)aSin2.phMod(phasemod_val);
-//   } else if(osc_index == 3){
-//     return (int)aSin3.phMod(phasemod_val);
-//   }
-// }
-
 unsigned int Note::env_next(){
   // modify that shit based on current control vals
   if(osc_index == 0){
@@ -513,8 +484,6 @@ EventDelay last_debounce_delay = EventDelay();
 // 10ms
 #define DEBOUNCE_DELAY 10
 byte bigButtonBrightness = 0;
-byte vuTotal = 0;
-unsigned long buttonMeterTimer = mozziMicros();
 
 // rotary button
 bool rbstate = false;
@@ -525,9 +494,7 @@ EventDelay last_rbdebounce_delay = EventDelay();
 #define RBDEBOUNCE_DELAY 10
 // time to hold down, 800ms
 #define RB_DELAY 0
-// long rb_timer = mozziMicros();
 
-// long rb_hold_timer = mozziMicros();
 EventDelay rb_hold_delay = EventDelay();
 
 bool rb_hold_once = false;
@@ -671,46 +638,62 @@ float note_to_freq(int midi_note){
 
 //     you can change mode to set intervals
 
-void saveSettings(){
-  // for(byte i=0; i<7; i++){
-  //   // save each thing in settings into eeprom beeetch!
-  //   EEPROM.put(SETTINGS_ADDRESS+i, userSettings[i])
-  // }
-  EEPROM.write(SETTINGS_ADDRESS, tempo);
-  EEPROM.write(SETTINGS_ADDRESS+1, detune);
-  EEPROM.write(SETTINGS_ADDRESS+2, keylock);
-  EEPROM.write(SETTINGS_ADDRESS+3, harmonicMode);
-  EEPROM.write(SETTINGS_ADDRESS+4, key);
-  // this is lastmode because the save happens during selectoptionmode
-  EEPROM.write(SETTINGS_ADDRESS+5, lastMode);
-  EEPROM.write(SETTINGS_ADDRESS+6, chord_schema);
-}
+// void saveSettings(){
+//   // for(byte i=0; i<7; i++){
+//   //   // save each thing in settings into eeprom beeetch!
+//   //   EEPROM.put(SETTINGS_ADDRESS+i, userSettings[i])
+//   // }
+//   int address = SETTINGS_ADDRESS;
+//   EEPROM.put(address, tempo);
+//   address += sizeof(tempo);
+//   EEPROM.put(address, detune);
+//   address += sizeof(detune);
+//   EEPROM.put(address, keylock);
+//   address += sizeof(keylock);
+//   EEPROM.put(address, harmonicMode);
+//   address += sizeof(harmonicMode);
+//   EEPROM.put(address, key);
+//   address += sizeof(key);
+//   // this is lastmode because the save happens during selectoptionmode
+//   EEPROM.put(address, lastMode);
+//   address += sizeof(lastMode);
+//   EEPROM.put(address, chord_schema);
+//   address += sizeof(chord_schema);
+// }
 
-void readSettings(){
-  byte tempoCheck;
-  EEPROM.get(SETTINGS_ADDRESS, tempoCheck);
-  // Serial.print("Fucking got stupid ");
-  // Serial.println(tempoCheck);
-  if(tempoCheck > 0){
-    tempo = tempoCheck;
-    EEPROM.get(SETTINGS_ADDRESS+1, detune);
-    EEPROM.get(SETTINGS_ADDRESS+2, keylock);
-    EEPROM.get(SETTINGS_ADDRESS+3, harmonicMode);
-    EEPROM.get(SETTINGS_ADDRESS+4, key);
-    EEPROM.get(SETTINGS_ADDRESS+5, mode);
-    EEPROM.get(SETTINGS_ADDRESS+6, chord_schema);
+// void readSettings(){
+//   byte tempoCheck;
+//   EEPROM.get(SETTINGS_ADDRESS, tempoCheck);
+//   // Serial.print("Fucking got stupid ");
+//   // Serial.println(tempoCheck);
+//   if(tempoCheck > 0){
+//     tempo = tempoCheck;
+    
+//     int address = SETTINGS_ADDRESS;
+//     EEPROM.get(address, tempo);
+//     address += sizeof(tempo);
+//     EEPROM.get(address, detune);
+//     address += sizeof(address);
+//     EEPROM.get(address, keylock);
+//     address += sizeof(address);
+//     EEPROM.get(address, harmonicMode);
+//     address += sizeof(address);
+//     EEPROM.get(address, key);
+//     address += sizeof(address);
+//     EEPROM.get(address, lastMode);
+//     address += sizeof(address);
+//     EEPROM.get(address, chord_schema);
+//     // yeah baby
+//     // setup_mode(mode);
+//     // Serial.println(detune);
+//     // Serial.println(keylock);
+//     // Serial.println(harmonicMode);
+//     // Serial.println(key);
+//     // Serial.println(mode);
+//     // Serial.println(chord_schema);
 
-    // yeah baby
-    // setup_mode(mode);
-    // Serial.println(detune);
-    // Serial.println(keylock);
-    // Serial.println(harmonicMode);
-    // Serial.println(key);
-    // Serial.println(mode);
-    // Serial.println(chord_schema);
-
-  }  
-}
+//   }  
+// }
 
 void safeRotaryChange(int8_t change){
   // change might be negative! so only add
@@ -893,9 +876,7 @@ void handle_rotary_button(){
           rb_block_mode_increment = false;
 
         }
-
       }
-
     }
 
     last_rbdebounce_delay.start(RBDEBOUNCE_DELAY);
@@ -976,15 +957,8 @@ void handle_note_button(){
           // play_note(48 + rotary_position, 0);
           play_note(72 + rotary_position, 0, available_slot);
         } else if(mode == ARPMODE){
+
           play_continuing = PLAYING;
-        // } else if(mode == WEIRDMODE){
-
-        //   // do some ol other shit
-        //   start_play_weird();
-          
-        //   // show buffer fill on pixel now tghat were playing
-        //   setDisplayMode(WEIRD);
-
         } else if(mode == CHORDMODE){
 
           // play a chord
@@ -1044,13 +1018,13 @@ void handle_note_button(){
           // Serial.println(optionMode);
           
           // last light is actually a toggle
-          Serial.print("omode is ");
-          Serial.println(optionMode);
+          // Serial.print("omode is ");
+          // Serial.println(optionMode);
           if(optionMode == 14){
             keylock = !keylock;
-            Serial.println(F("Hey  bitch"));
+            // Serial.println(F("Hey  bitch"));
             // fuck it
-            saveSettings();
+            // saveSettings();
           } else {
             setup_mode( optionMode );
 
@@ -1130,7 +1104,7 @@ void setRepeatNote(byte note){
   }
 
   // wait 4 beats ... then play elsewheref  
-  note_delays[available_slot]->start( oneBeat() * 4 );
+  note_delays[available_slot]->start( oneBeat() * 16 );
 
   for(byte i=0;i<4;i++){
     if(repeat_notes[i] == 0){
@@ -1288,23 +1262,6 @@ void play_seq_chord(byte note_offset){
   
   available_slot = available_note_slot();
   play_note(note3 + octave_offset, r_time, available_slot);
-}
-
-void start_play_weird(){
-  // start playing all oscs
-  envelope0.noteOn();
-  play_continuing = PLAYING;
-}
-
-void stop_play_weird(){
-  // this is stop holding button
-  // then wait for note_delay (release), then buff_delay (pause), then buffer plays
-
-
-  // stop playing - we using 1 env for all oscs
-  envelope0.noteOff();
-  // NEED this notedelay to trigger play_continuing = STOPPED
-  note_delays[0]->start( getReleaseTime(envelope_mode) );
 }
 
 void start_play_sweep(){
@@ -1480,9 +1437,9 @@ void setup(){
 
   // start somewhere random in the 'random seq'
   randomSeed(analogRead(0));
-
+  
   // load settings from EEP <3 on startup
-  readSettings();
+  // readSettings();
 
   // start up the neopix
   pixel.begin();
@@ -1526,7 +1483,7 @@ void setup(){
   // aPhasor1.setFreq(phase_freq);
   
   // byte vib_intensity = 255;
-  aVibrato.setFreq(3.f);
+  // aVibrato.setFreq(3.f);
 
   
   // -128 to 127
@@ -1564,6 +1521,10 @@ void setup(){
 
   setDisplayMode(SHOWINTRO);
   introDelay.start(INTRODELAY);
+
+
+  // load settings from EEP <3 on startup
+  // readSettings();
 }
 
 unsigned int oneBeat(){
@@ -1888,7 +1849,6 @@ void setDisplayMode(byte dispMode){
 
   // reset all this reusable shit  
   pixel_counter = 0;
-  pixel_counter2 = 0;
   // display_aux_timer = mozziMicros();
   // reset to nothing so we hit its set in display__ method
   display_aux_delay.start();
@@ -2192,10 +2152,6 @@ void handleDisplay(){
   } else if(display_mode == PLAY){
     // show notes and level
     showPlay();
-  } else if(display_mode == WEIRD){
-    // show buffer filling up
-    // then show buffer draining out
-    showWeird();
   } else if(display_mode == IDLE){
     showIdle();
   } else if(display_mode == LOADING){
@@ -2302,25 +2258,6 @@ void showIntro(){
     }
     display_aux_delay.start(64);
   }
-}
-
-void showWeird(){
-//   if(buffer_amount >= 0){
-
-//     // x3 so its just one loop to 255 each rgb
-//     byte numlights = floor(buffer_amount/16);
-//     // Serial.print(F("Numlights is "));
-//     // Serial.println(numlights);
-//     for(byte i=0; i<21; i++){
-        
-//       if(i<numlights){
-//         pixel_colors[i] = 255;
-//       } else {
-//         pixel_colors[i] = 0;
-//       }
-//     }
-
-//   }
 }
 
 void showPlay(){
@@ -2919,120 +2856,6 @@ int updateAudio(){
   // -if wait complete, play buffer
 
   // get vals from all playing notes
-
-  // maybe for later
-  // if(mode == WEIRDMODE){
-    
-  //   // keep on playin
-  //   if(play_continuing != STOPPED){
-  //     // play while I'm holdin that button
-  //     sig = aSin0.next() * envelope0.next();
-
-  //     // fill buffer
-  //     // take a sample every 128 steps... eww!
-  //     if(buffstepcount == 0){
-
-  //       // Serial.print("SetBUFFERE ");
-  //       // Serial.println((int)buffer[buffcount]);
-  //       buffcount++;
-
-  //       // there is officially *something* in the buffer
-  //       buffer_empty = false;
-
-  //       // only TAKE a sample once every 256
-  //       // buffer[buffcount] = (char) sig/2.0;
-
-  //       // map int (sig) onto char datatype
-  //       Serial.print(F("Set buffer, fuckface to "));
-  //       Serial.println( sig );
-
-  //       buffer[buffcount] = sig/32767 * 128;
-
-  //       // fill up lights as we fill buffer
-  //       if(buffer_amount < BUFFER_LENGTH){
-  //         buffer_amount += 2;
-  //         if(buffer_amount>BUFFER_LENGTH){
-  //           buffer_amount=BUFFER_LENGTH;
-  //         }
-  //       }
-
-  //     }
-
-  //     buffstepcount++;
-  //     // count up until its time to take another sample
-  //     if(buffstepcount == BUFFSTEP_LENGTH){
-  //       buffstepcount = 0;
-  //     }
-  
-  //     // restart filling buffer if still holding button
-  //     if(buffcount == BUFFER_LENGTH){
-  //       buffcount = 0;
-  //       buffstepcount = 0;
-  //     }
-  //   }
-
-  //   // i am not holding the button, there is buffer, and we waited for buffdelay
-  //   if(play_continuing == STOPPED && !buffer_empty && buffdelay.ready()) {
-
-  //     // Serial.print("I went to play my buffertown at buffcount ");
-  //     // Serial.println(buffcount);
-  //     if(buffcount < BUFFER_LENGTH){
-  //       // play back from buffer
-  //       // Serial.print("PLAYINGBCKS ");
-  //       // Serial.println(buffer[buffcount]);
-
-  //       // map char buffer sample onto int type range
-  //       int this_sig = buffer[buffcount]/128.0 * 32767;
-  //       // y = mx + b
-  //       sig = (int) (slope * buffstepcount + this_sig);
-  //       // attenuate siga little
-  //       // sig = (int) (slope * buffstepcount + this_sig) * 0.36;
-
-  //       // only switch to the next sample once we've arrived there
-  //       if(buffstepcount == 0){
-  //         buffcount++;
-
-  //         // y2 is next amp, y1 is this amp
-  //         // xs are where we are within this bufferstep
-  //         int next_sig = (int) buffer[buffcount + 1];
-
-  //         // set next slope
-  //         slope = get_slope(next_sig, this_sig, 63, 0);
-  //       }
-
-  //       buffstepcount++;
-  //       if(buffstepcount == BUFFSTEP_LENGTH){
-  //         buffstepcount = 0;
-  //       }
-
-  //       // Serial.print("Played from buffer ");
-  //       // Serial.println(sig);
-  //     } else {
-  //       // Serial.println("Finished Playing Buffer");
-  //       // stop all that downloadin
-  //       // we are actually done with the buffer
-  //       buffcount = 0;
-  //       buffstepcount = 0;
-
-  //       bufferreplay++;
-  //       if(bufferreplay == 2){
-  //         // stop repeating buffer playback after 5
-  //         bufferreplay = 0;
-  //         buffer_empty = true;
-  //       }
-  //     }
-
-  //     if(buffer_amount > 0 && buffer_amount > 4){
-  //       // we finsihed using  a buffer sample, drain out (for lights), only on last repeat
-  //       // Serial.print(F("Sink buffer amt "));
-  //       // Serial.println(buffer_amount);
-  //       buffer_amount -= 4;
-  //     }
-  //   }
-    
-  //   sig = envelope0.next() * sig;
-  // } else 
-
 
   if(mode == SWEEPMODE){
 
