@@ -282,9 +282,9 @@ class Note {
     byte osc_index;
     byte currentNote;
   public:
-    Note(byte, int);
     // for now just freq
     // void initialize(int, int);
+    Note(byte);
     void note_on();
     void note_off(bool);
 
@@ -303,22 +303,8 @@ class Note {
     byte get_note();
 };
 
-Note::Note(byte init_osc_index, int init_freq){
+Note::Note(byte init_osc_index){
   osc_index = init_osc_index;
-  // int freq = init_freq;
-
-  // start this osc off with our freq
-  if(init_freq > 0){
-    if(osc_index == 0){
-      aSin0.setFreq(init_freq);
-    } else if(osc_index == 1){
-      aSin1.setFreq(init_freq);
-    } else if(osc_index == 2){
-      aSin2.setFreq(init_freq);
-    } else if(osc_index == 3){
-      aSin3.setFreq(init_freq);
-    }
-  }
 }
 
 void Note::store_note(byte newNote){
@@ -455,10 +441,10 @@ unsigned int Note::env_next(){
 Note *notes[4];
 EventDelay *note_delays[4];
 
-Note note0 = Note(0, 0);
-Note note1 = Note(1, 0);
-Note note2 = Note(2, 0);
-Note note3 = Note(3, 0);
+Note note0 = Note(0);
+Note note1 = Note(1);
+Note note2 = Note(2);
+Note note3 = Note(3);
 
 EventDelay qa_delay = EventDelay();
 
@@ -1038,12 +1024,10 @@ void handle_note_button(){
             // t = timeof1beat/min
 
             // tempo = 60s * 1beat / tapTime
+            // double it up, seems very slow
             tempo = 60000000/(now - tempoTapTimer);
             // Serial.print(F("Bitch I set the beat to "));
             // Serial.println(60000000/(now - tempoTapTimer));
-          } else if(mode == SETVOLMODE || mode == SETFILTERMODE){
-            // play test note
-            play_note(72 + rotary_position, 0, available_slot);
           }
 
           // first tap just sets timer to compare on second
@@ -1443,6 +1427,8 @@ void setup(){
 
   // start up the neopix
   pixel.begin();
+  // show black
+  pixel.show();
 
   // initialize colors
   for(byte i=0; i<NUMPIXELS*3; i++){
@@ -1496,10 +1482,6 @@ void setup(){
   // randomSeed(analogRead(0));
 
   startMozzi(CONTROL_RATE); // :)
-  note0 = Note(0, 0);
-  note1 = Note(1, 0);
-  note2 = Note(2, 0);
-  note3 = Note(3, 0);
   notes[0] = &note0;
   notes[1] = &note1;
   notes[2] = &note2;
@@ -1550,10 +1532,10 @@ unsigned int getReleaseTime(byte env_mode){
 
 unsigned int getArpTime(byte env_mode){
   if(env_mode == SHORT_ENV){
-    return oneBeat();
+    return oneBeat() / 2;
   } else if(env_mode == LONG_ENV){
     // twice as long delay between notes in longenv
-    return oneBeat() * 2;
+    return oneBeat();
   }
 }
 
