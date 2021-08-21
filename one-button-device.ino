@@ -83,9 +83,6 @@ Cancel button?
 #define SETDELAYMODE 13
 #define SETDETUNEMODE 14
 
-#define WEIRDMODE -8
-
-
 // display modes
 #define COOL 0
 #define SHOWMODE 1
@@ -104,6 +101,7 @@ Cancel button?
 #define SHOWDELAY 14
 #define SHOWDETUNE 15
 #define SHOWINTRO 16
+#define SHOWPLACEOSC 17
 
 #define OPTION0COLOR_R 245
 #define OPTION0COLOR_G 11
@@ -253,6 +251,9 @@ int8_t current_note = 0;
 
 // select which chord schema
 byte chord_schema = 0;
+
+// select which osc (or 4 == all) to edit
+byte placeOsc = 0;
 
 // set via setup_mode in setup()
 byte mode = REGNOTEMODE;
@@ -535,7 +536,7 @@ void play_note(byte new_note, unsigned int delay_time, uint8_t available_slot){
   // save which midi note
   notes[available_slot]->store_note(new_note);
 
-  if(mode == REGNOTEMODE || mode == REPEATMODE || mode == SETFILTERMODE || mode == SETVOLMODE){
+  if(mode == REGNOTEMODE || mode == REPEATMODE){
     // this is the which notes[i] slot were playing from in regular mode
 
     // not used in beauty or piano mode cause we already use all 4
@@ -789,16 +790,41 @@ void play_arp_notes(){
   }
 }
 
-void set_weird_freq(){
-  aSin0.setFreq( (float) 440.0 + (rotary_position * 10) );
-}
-
 void set_sweep_freq(){
 
   // exponentially increase with rot pos
   // float sweep_freq = 440.0 + ( pow(rotary_position, 2) );
-  float sweep_freq = 440.0 + rotary_position + (8 * freqHeat) + detune;
-  aSin0.setFreq(sweep_freq);
+  aSin0.setFreq( calcFreqOffset() );
+}
+
+void setPlaceFreq(byte osc_index){
+  float freq_offset = calcFreqOffset();
+  if(osc_index == 0){
+
+    // set for tuning one osc
+    notes[0]->set_frequency(440.0 + freq_offset);
+  } else if(osc_index == 1){
+
+    notes[1]->set_frequency(440.0 + freq_offset);
+  } else if(osc_index == 2){
+
+    notes[2]->set_frequency(440.0 + freq_offset);
+  } else if(osc_index == 3){
+
+    notes[3]->set_frequency(440.0 + freq_offset);
+  } else {
+
+    // do a knob change
+    notes[0]->set_frequency( notes[0]->get_frequency() + freq_offset );
+    notes[1]->set_frequency( notes[1]->get_frequency() + freq_offset );
+    notes[2]->set_frequency( notes[2]->get_frequency() + freq_offset );
+    notes[3]->set_frequency( notes[3]->get_frequency() + freq_offset );
+  }
+}
+
+
+float calcFreqOffset(){
+  return rotary_position + (8 * freqHeat) + detune;
 }
 
 void handle_rotary_button(){
@@ -826,21 +852,32 @@ void handle_rotary_button(){
       } else {
         // rb released
 
-        if(button_state && mode == CHORDSCHEMAMODE){
+        if(button_state){
 
-          // if big button is held, and its chordschema, use rb to increment chordschema
-          // Serial.println(F("I incremented chordschema "));
-          chord_schema++;
-          if(chord_schema > 6){
-            chord_schema = 0;
+          // RB SUBOPTIONS
+          if(mode == CHORDSCHEMAMODE){
+
+            // if big button is held, and its chordschema, use rb to increment chordschema
+            // Serial.println(F("I incremented chordschema "));
+            chord_schema++;
+            if(chord_schema > 6){
+              chord_schema = 0;
+            }
+            setDisplayMode(SHOWCHORDSCHEMA);            
+          } else if(mode == ARPMODE){
+            harmonicMode++;
+            if(harmonicMode > 6){
+              harmonicMode = 0;
+            }
+            setDisplayMode(SHOWHARMMODE);
+          } else if(mode == PLACEMODE){
+            placeOsc++;
+            if(placeOsc == 5){
+              placeOsc = 0;
+            }
+            setDisplayMode(SHOWPLACEOSC);
           }
-          setDisplayMode(SHOWCHORDSCHEMA);
-        } else if(button_state && mode == ARPMODE){
-          harmonicMode++;
-          if(harmonicMode > 6){
-            harmonicMode = 0;
-          }
-          setDisplayMode(SHOWHARMMODE);
+
         } else {
           // otherwise, increment mode normally
 
@@ -995,14 +1032,16 @@ void handle_note_button(){
           play_note(115 + rotary_position, false, 3);
         } else if(mode == SELECTOPTIONMODE){
           // pressed button, so select mode based on rotary position % 3
-          byte optionMode = abs(rotary_position) % 6 + 9;
+          byte optionMode = abs(rotary_position) % 6 + 10;
           // Serial.print(F("I have selected option "));
           // Serial.println(optionMode);
           
           // last light is actually a toggle
           // Serial.print("omode is ");
           // Serial.println(optionMode);
-          if(optionMode == 14){
+          if(optionMode == 15){
+            // this is just more than the last seelct option -> not really a mode
+
             keylock = !keylock;
             // Serial.println(F("Hey  bitch"));
             // fuck it
@@ -1011,6 +1050,12 @@ void handle_note_button(){
             setup_mode( optionMode );
 
           }
+        } else if(mode == PLACEMODE){
+          // just start em up at whatever freq they're at
+          notes[0]->note_on();
+          notes[1]->note_on();
+          notes[2]->note_on();
+          notes[3]->note_on();
         } else if(mode == SETTEMPOMODE){
           // use button pushes to set tempo
 
@@ -1034,6 +1079,9 @@ void handle_note_button(){
         }
         
       } else if(!button_state) {
+
+        // HEY - here is where button state off directly triggeres noteoffs - most used for modes where all 4 voices are used at the same time
+
         // Serial.println("No more note held");
         // no more note held
         // regular note held is set in play_note
@@ -1049,7 +1097,7 @@ void handle_note_button(){
         } else if(mode == SWEEPMODE){
 
           stop_play_sweep();
-        } else if(mode == BEAUTYMODE || mode == PIANOMODE){
+        } else if(mode == BEAUTYMODE || mode == PIANOMODE || mode == PLACEMODE){
 
           for(byte i=0; i<4; i++){
             // start noteoffs because button was released
@@ -1690,14 +1738,6 @@ void setup_mode(byte newmode){
   } else if(mode == ARPMODE){
 
     dimThisMode = false;
-  } else if(mode == WEIRDMODE){
-    // set_weird_freq();
-
-    // // init buffer, its 128 so byte okay
-    // for(unsigned long i=0; i<BUFFER_LENGTH; i++){
-    //   buffer[i] = 0;
-    // }
-    // buffer_empty = true;
   } else if(mode == SWEEPMODE){
 
     // not needed because of setupenvelopes
@@ -1723,6 +1763,12 @@ void setup_mode(byte newmode){
     // flag this down to show that we dont set tempo before recording tap 1
     tempoTapTimer = false;
     setTempoTime = mozziMicros();
+  } else if(mode == PLACEMODE){
+    dimThisMode = true;
+    for(byte i=0; i<4; i++){
+      // start at 0 freq so its 'off'
+      notes[i]->set_frequency(0);
+    }
   }
 
   // show the new mode, unless its an option
@@ -1817,6 +1863,8 @@ void setDisplayMode(byte dispMode){
       }
     }
     bigButtonBrightness = 255;
+  } else if(dispMode == SHOWPLACEOSC){
+    zeroOutDisplay = true;
   }
 
   if(zeroOutDisplay){
@@ -1928,28 +1976,33 @@ void updateControl() {
     } else if(rotaryState == 2 && mode <= SELECTOPTIONMODE){
       // need rp to move to select an option!
 
-      if(keylock){
-        safeRotaryChange( moveRotaryWithinScale(rp_move) );
-      } else {
-        // is regular
-        safeRotaryChange(rp_move);
-      }
+      // only set when changing freq
+      if(mode == SWEEPMODE || mode == PLACEMODE){
 
-      // change currently playing freqs
-      updatePlayingNotes(rp_move);
-
-      rotaryState = 0;
+        // no scales in sweep mode
+        pixel_flag = !pixel_flag;
+        freqHeat += rp_move;
         
-      // Serial.print(F("Rotary postition is "));
-      // Serial.println(rotary_position);
-    }
+        // reflect the rotary change
+        safeRotaryChange(rp_move);
 
-    // only set when changing freq
-    if(mode == WEIRDMODE){
-      set_weird_freq();
-    } else if(mode == SWEEPMODE){
-      pixel_flag = !pixel_flag;
-      freqHeat += rp_move;
+        // set the frequency for the currently-selected place osc
+        setPlaceFreq( placeOsc );
+      } else {
+
+        if(keylock){
+          safeRotaryChange( moveRotaryWithinScale(rp_move) );
+        } else {
+          // is regular
+          safeRotaryChange(rp_move);
+        }
+
+        // change currently playing freqs
+        updatePlayingNotes(rp_move);
+      }
+      
+      rotaryState = 0;
+      // Serial.println(rotary_position);
     }
 
     last_a = aVal;
@@ -2062,29 +2115,12 @@ void updateControl() {
       }
     } else if(mode == BEAUTYMODE || mode == PIANOMODE){
       // fuck!
-
-          if(!notes[i]->is_available() && note_delays[i]->ready()){
-            // Serial.print(i);
-            // Serial.println(F("Was ready!"));
-            notes[i]->set_available(true);
-          }
-    } else if(mode == SETVOLMODE || mode == SETFILTERMODE){
-      if(notes[i]->is_playing() && current_note != i){
-
-        // do regular note off if button not held for this note
-        notes[i]->note_off();
-        note_delays[i]->start( getReleaseTime(envelope_mode) );
-        
-        // get rid of that pip
-        displayPlayNotes[i] = false;
-
-      } else if(!notes[i]->is_available() && note_delays[i]->ready()){
+      if(!notes[i]->is_available() && note_delays[i]->ready()){
         // Serial.print(i);
         // Serial.println(F("Was ready!"));
         notes[i]->set_available(true);
       }
     }
-
 
     // this doesnt work, may need ONE timer that retriggers all 4
     // // for all modes, if still holding the button refresh the note
@@ -2183,6 +2219,8 @@ void handleDisplay(){
     showDetune();
   } else if(display_mode == SHOWINTRO){
     showIntro();
+  } else if(display_mode == SHOWPLACEOSC){
+    showPlaceOsc();
   }
 
   if(!button_state && display_mode != IDLE && mode < SELECTOPTIONMODE && display_idle_delay.ready() ){
@@ -2234,6 +2272,14 @@ bool inRange(byte low, byte high, byte value){
 
 bool colorCloseEnough(byte color, byte destColor){
   return inRange(destColor-4, destColor+4, color);
+}
+
+void showPlaceOsc(){
+  for(byte i=0; i<=placeOsc; i++){
+    pixel_colors[i] = 255;
+    pixel_colors[i+1] = 255;
+    pixel_colors[i+2] = 255;
+  }
 }
 
 void showIntro(){
@@ -2926,8 +2972,6 @@ int updateAudio(){
         sig += notes[i]->env_next() * ( ( next_sample * (1/i+1) ) >> 2);
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.68)  );
         // sig += (int) ( notes[i]->env_next() );
-      } else if(mode == SETFILTERMODE || mode == SETVOLMODE){
-        // sig += ( notes[i]->env_next() * (next_sample >> 2) );
       }
     }
   }
