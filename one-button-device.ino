@@ -872,7 +872,7 @@ void handle_rotary_button(){
             setDisplayMode(SHOWHARMMODE);
           } else if(mode == PLACEMODE){
             placeOsc++;
-            if(placeOsc == 5){
+            if(placeOsc > 4){
               placeOsc = 0;
             }
             setDisplayMode(SHOWPLACEOSC);
@@ -1977,18 +1977,7 @@ void updateControl() {
       // need rp to move to select an option!
 
       // only set when changing freq
-      if(mode == SWEEPMODE || mode == PLACEMODE){
-
-        // no scales in sweep mode
-        pixel_flag = !pixel_flag;
-        freqHeat += rp_move;
-        
-        // reflect the rotary change
-        safeRotaryChange(rp_move);
-
-        // set the frequency for the currently-selected place osc
-        setPlaceFreq( placeOsc );
-      } else {
+      if(mode != SWEEPMODE && mode != PLACEMODE) {
 
         if(keylock){
           safeRotaryChange( moveRotaryWithinScale(rp_move) );
@@ -2003,6 +1992,25 @@ void updateControl() {
       
       rotaryState = 0;
       // Serial.println(rotary_position);
+    }
+
+    if(mode == SWEEPMODE){
+      pixel_flag = !pixel_flag;
+      // too chunky for place
+      freqHeat += rp_move;
+    } else if(mode == PLACEMODE){
+
+      freqHeat += rp_move;
+      if(placeOsc < 4){
+
+      } else {
+        // reflect the rotary change
+        safeRotaryChange(rp_move);
+  
+      }
+      
+      // set the frequency for the currently-selected place osc
+      setPlaceFreq( placeOsc );
     }
 
     last_a = aVal;
@@ -2024,7 +2032,7 @@ void updateControl() {
     } else if(mode == PIANOMODE){
       // each env has its own setting
       envelope_mode = this_env_toggle ? PIANO_SHORT_ENV : PIANO_LONG_ENV;
-    } else {
+    } else if(mode != PLACEMODE) {
       // shared adsr values for envs
       envelope_mode = this_env_toggle ? SHORT_ENV : LONG_ENV;
     }
@@ -2276,9 +2284,9 @@ bool colorCloseEnough(byte color, byte destColor){
 
 void showPlaceOsc(){
   for(byte i=0; i<=placeOsc; i++){
-    pixel_colors[i] = 255;
-    pixel_colors[i+1] = 255;
-    pixel_colors[i+2] = 255;
+    pixel_colors[i*3] = 255;
+    pixel_colors[i*3+1] = 255;
+    pixel_colors[i*3+2] = 255;
   }
 }
 
