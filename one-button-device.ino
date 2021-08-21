@@ -74,13 +74,14 @@ Cancel button?
 #define PIANOMODE 5
 #define REPEATMODE 6
 #define SWEEPMODE 7
+#define PLACEMODE 8
 // its gotta be last
-#define SELECTOPTIONMODE 8
-#define SETTEMPOMODE 9
-#define SETFILTERMODE 10
-#define SETVOLMODE 11
-#define SETDELAYMODE 12
-#define SETDETUNEMODE 13
+#define SELECTOPTIONMODE 9
+#define SETTEMPOMODE 10
+#define SETFILTERMODE 11
+#define SETVOLMODE 12
+#define SETDELAYMODE 13
+#define SETDETUNEMODE 14
 
 #define WEIRDMODE -8
 
@@ -499,12 +500,7 @@ bool rotaryMoved = false;
 // so wait for two moves before making one
 byte rotaryState = 0;
 
-// #define ROTARY_DEBOUNCE_DELAY 10000
-// unsigned long rotary_debounce_timer = mozziMicros();
-// EventDelay rotary_debounce_delay = EventDelay(ROTARY_DEBOUNCE_DELAY);
-// #define ROTARY_FUCKUP_DELAY 32000
-
-// keep like this cause its actually two timers
+// keep in micros cause its actually two timers
 long sweep_timer = mozziMicros();
 
 byte available_note_slot(){
@@ -1251,6 +1247,8 @@ void play_seq_chord(byte note_offset){
 void start_play_sweep(){
   // Serial.println(F("I start play Sweep")); 
   envelope0.noteOn();
+  // start an extra timer so that we can know to bump noteOn again if we're still holding down
+  note_delays[1]->start( getReleaseTime(envelope_mode) );
   play_continuing = PLAYING;
 }
 
@@ -1276,7 +1274,7 @@ bool short_env_disabled(){
   return !toggles[0];
 }
 
-// too big for memory :/
+// too big for memory
 // bool reverb_enabled(){
 //   return toggles[2];
 // }
@@ -1990,8 +1988,13 @@ void updateControl() {
   }
 
   // handle events for oscillatorsz
+  bool anyPlaying = false;
   for(byte i=0; i<4; i++){
 
+    if(notes[i]->is_playing()){
+      anyPlaying = true;
+    }
+    
     if(mode == REGNOTEMODE){
       
       if(notes[i]->is_playing() && current_note != i){
@@ -2017,22 +2020,6 @@ void updateControl() {
         displayPlayNotes[i] = false;
       }
 
-    } else if(mode == SWEEPMODE){
-      // wait 2ms to change sweep freq
-      //  oops 200 is 2 microseconds
-      unsigned long now = mozziMicros();
-      if(now-sweep_timer > 1800000){
-
-        if(freqHeat > 0){
-          freqHeat -= 1;
-        } else if(freqHeat < 0){
-          freqHeat += 1;
-        }
-      }
-      if((now - sweep_timer) > 20000){
-        set_sweep_freq();
-        sweep_timer = now;
-      }
     } else if(mode == REPEATMODE){
 
       if(i < 2){
@@ -2098,12 +2085,48 @@ void updateControl() {
       }
     }
 
-    // shut off after we waited for the release
-    if(play_continuing == TAILING && note_delays[0]->ready()){
-      // Serial.println(F("I stoped play_continuing"));
-      play_continuing = STOPPED;
+
+    // this doesnt work, may need ONE timer that retriggers all 4
+    // // for all modes, if still holding the button refresh the note
+    if(button_state && notes[i]->is_playing() && mode != ARPMODE){
+      if(note_delays[i]->ready()){
+        notes[i]->note_on();
+        note_delays[i]->start( getReleaseTime(envelope_mode) );
+      }
+    }
+  } 
+
+  if(!anyPlaying && play_continuing == TAILING){
+    play_continuing = STOPPED;
+  }
+
+  if(mode == SWEEPMODE){
+    // sweepers only
+
+    // wait 2ms to change sweep freq
+    //  oops 200 is 2 microseconds
+    unsigned long now = mozziMicros();
+    if(now-sweep_timer > 1800000){
+
+      if(freqHeat > 0){
+        freqHeat -= 1;
+      } else if(freqHeat < 0){
+        freqHeat += 1;
+      }
+    }
+    if((now - sweep_timer) > 20000){
+      set_sweep_freq();
+      sweep_timer = now;
+    }
+
+    if(button_state){
+      if(note_delays[1]->ready()){
+        notes[0]->note_on();
+        note_delays[1]->start( getReleaseTime(envelope_mode) );
+      }
     }
   }
+
 
   if(mode == SETTEMPOMODE){
     // set onbeat so displaymode will visualize the pulse
@@ -2865,7 +2888,7 @@ int updateAudio(){
 
       // gain * filter(oscnext)
       // this was arpmode... mby put back?
-      if(mode == REGNOTEMODE || mode == ARPMODE || mode == REPEATMODE){
+      if(mode == REGNOTEMODE || mode == ARPMODE || mode == REPEATMODE || mode == PLACEMODE){
         // if( notes[i]->is_playing() ){
         // }
           sig += ( notes[i]->env_next() * (next_sample >> 2) );
