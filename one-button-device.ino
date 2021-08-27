@@ -213,7 +213,7 @@ LowPassFilter lpf;
 byte cutoff = 196;
 float volume = 1.0;
 
-int8_t freqHeat = 0;
+int freqHeat = 0;
 
 int detune = 0;
 
@@ -253,7 +253,7 @@ int8_t current_note = 0;
 byte chord_schema = 0;
 
 // select which osc (or 4 == all) to edit
-byte placeOsc = 0;
+byte placeOsc = 4;
 
 // set via setup_mode in setup()
 byte mode = REGNOTEMODE;
@@ -384,13 +384,13 @@ float Note::get_frequency(){
 void Note::set_frequency(float new_freq){
   freq = new_freq;
   if(osc_index == 0){
-    return aSin0.setFreq(new_freq);
+    return aSin0.setFreq(freq);
   } else if(osc_index == 1){
-    return aSin1.setFreq(new_freq);
+    return aSin1.setFreq(freq);
   } else if(osc_index == 2){
-    return aSin2.setFreq(new_freq);
+    return aSin2.setFreq(freq);
   } else if(osc_index == 3){
-    return aSin3.setFreq(new_freq);
+    return aSin3.setFreq(freq);
   }
 }
 
@@ -489,7 +489,9 @@ bool rb_hold_once = false;
 bool rb_block_mode_increment = false;
 
 // rotary -127 to 127
-int8_t rotary_position = 12;
+#define ROTARYMIN -32000
+#define ROTARYMAX 32000
+int rotary_position = 12;
 int8_t last_rp_move = 0;
 // rotarys a pin reading
 bool last_a = digitalRead(ROTARY_A_PIN);
@@ -680,7 +682,7 @@ float note_to_freq(int midi_note){
 
 void safeRotaryChange(int8_t change){
   // change might be negative! so only add
-  if(rotary_position+change < 128 && rotary_position+change>-128){
+  if(rotary_position+change < ROTARYMAX && rotary_position+change > ROTARYMIN){
     rotary_position += change;
   }
 }
@@ -794,37 +796,45 @@ void set_sweep_freq(){
 
   // exponentially increase with rot pos
   // float sweep_freq = 440.0 + ( pow(rotary_position, 2) );
-  aSin0.setFreq( calcFreqOffset() );
+  aSin0.setFreq( calcFreqOffset(rotary_position) );
 }
 
-void setPlaceFreq(byte osc_index){
-  float freq_offset = calcFreqOffset();
-  if(osc_index == 0){
+void setPlaceFreq(byte osc_index, int8_t rpMove){
+  if(osc_index == 4) {
 
-    // set for tuning one osc
-    notes[0]->set_frequency(440.0 + freq_offset);
-  } else if(osc_index == 1){
-
-    notes[1]->set_frequency(440.0 + freq_offset);
-  } else if(osc_index == 2){
-
-    notes[2]->set_frequency(440.0 + freq_offset);
-  } else if(osc_index == 3){
-
-    notes[3]->set_frequency(440.0 + freq_offset);
+    // do a knob change, so only change by 1 chunk
+    if(notes[0]->get_frequency() != 0){
+      notes[0]->set_frequency( notes[0]->get_frequency() + calcKnobOffset( rpMove ) );
+    }
+    if(notes[1]->get_frequency() != 0){
+      notes[1]->set_frequency( notes[1]->get_frequency() + calcKnobOffset( rpMove ) );
+    }
+    if(notes[2]->get_frequency() != 0){
+      notes[2]->set_frequency( notes[2]->get_frequency() + calcKnobOffset( rpMove ) );
+    }
+    if(notes[3]->get_frequency() != 0){
+      notes[3]->set_frequency( notes[3]->get_frequency() + calcKnobOffset( rpMove ) );
+    }
   } else {
 
-    // do a knob change
-    notes[0]->set_frequency( notes[0]->get_frequency() + freq_offset );
-    notes[1]->set_frequency( notes[1]->get_frequency() + freq_offset );
-    notes[2]->set_frequency( notes[2]->get_frequency() + freq_offset );
-    notes[3]->set_frequency( notes[3]->get_frequency() + freq_offset );
-  }
+    // set for tuning one osc - use entire offset here
+    notes[osc_index]->set_frequency(440.0 + calcFreqOffset(rotary_position));
+  } 
 }
 
+float calcFreqOffset(int rpMoves){
+  // freq heat just serves to pump up size of each move (1 rpmove) if you're realllly turnin
 
-float calcFreqOffset(){
-  return rotary_position + (8 * freqHeat) + detune;
+  Serial.print("Im settin to ");
+  Serial.println(rpMoves + (8 * freqHeat) + detune);
+
+  return rpMoves + (8 * freqHeat) + detune;
+}
+
+float calcKnobOffset(int rpMoves){
+  // freq heat just serves to pump up size of each move (1 rpmove) if you're realllly turnin
+
+  return 16 * rpMoves + detune;
 }
 
 void handle_rotary_button(){
@@ -969,11 +979,6 @@ void handle_note_button(){
         // HERE MEANS I"M GOING TO start PLAYing SOMTHING
         if(mode == REGNOTEMODE){
           // next note is C3 offset by current rotary value!
-          // Serial.print("Trying to play");
-          // Serial.println(48 + rotary_position);
-          // Serial.print("rotary_position");
-          // Serial.println(rotary_position);
-          // play_note(48 + rotary_position, 0);
           play_note(72 + rotary_position, 0, available_slot);
         } else if(mode == ARPMODE){
 
@@ -981,13 +986,8 @@ void handle_note_button(){
         } else if(mode == CHORDMODE){
 
           // play a chord
-          // Serial.print(F("love to play chord "));
-          // Serial.println(rotary_position);
           play_seq_chord(rotary_position);
         } else if(mode == CHORDSCHEMAMODE){
-
-          // Serial.print(F("love to play schema chord "));
-          // Serial.println(rotary_position);
 
           // in this case, were thinking of input as a note were modifying
           play_schema_chord(60+rotary_position);
@@ -999,7 +999,6 @@ void handle_note_button(){
           }
         } else if(mode == REPEATMODE){
 
-          // Serial.println(F("Playing Repeat"));
           play_note(72 + rotary_position, getArpTime(envelope_mode), available_slot);
           setRepeatNote(72 + rotary_position);
 
@@ -1132,7 +1131,7 @@ void setRepeatNote(byte note){
   }
 
   // wait 4 beats ... then play elsewheref  
-  note_delays[available_slot]->start( oneBeat() * 16 );
+  note_delays[available_slot]->start( oneBeat() * 8 );
 
   for(byte i=0;i<4;i++){
     if(repeat_notes[i] == 0){
@@ -1463,7 +1462,7 @@ float get_slope(float y2, float x2, int y1, int x1){
 }
 
 void setup(){
-  // Serial.begin(9600);
+  Serial.begin(9600);
 
   // start somewhere random in the 'random seq'
   randomSeed(analogRead(0));
@@ -1977,7 +1976,20 @@ void updateControl() {
       // need rp to move to select an option!
 
       // only set when changing freq
-      if(mode != SWEEPMODE && mode != PLACEMODE) {
+      if(mode == PLACEMODE){
+        int oldFreqHeat = freqHeat;
+        freqHeat += rp_move * 2;
+        if( (freqHeat ^ oldFreqHeat) < 0 ){
+          // do they have opposite signs (ie did we cross 0)
+          // dont go negative if so
+          freqHeat = 0;
+        }
+        // reflect the rotary change
+        safeRotaryChange(rp_move);
+          
+        // set the frequency for the currently-selected place osc
+        setPlaceFreq( placeOsc, rp_move );
+      } else if(mode != SWEEPMODE) {
 
         if(keylock){
           safeRotaryChange( moveRotaryWithinScale(rp_move) );
@@ -1991,26 +2003,12 @@ void updateControl() {
       }
       
       rotaryState = 0;
-      // Serial.println(rotary_position);
     }
 
     if(mode == SWEEPMODE){
       pixel_flag = !pixel_flag;
       // too chunky for place
       freqHeat += rp_move;
-    } else if(mode == PLACEMODE){
-
-      freqHeat += rp_move;
-      if(placeOsc < 4){
-
-      } else {
-        // reflect the rotary change
-        safeRotaryChange(rp_move);
-  
-      }
-      
-      // set the frequency for the currently-selected place osc
-      setPlaceFreq( placeOsc );
     }
 
     last_a = aVal;
@@ -2152,7 +2150,7 @@ void updateControl() {
     unsigned long now = mozziMicros();
     if(now-sweep_timer > 1800000){
 
-      if(freqHeat > 0){
+      if(freqHeat > 0 ){
         freqHeat -= 1;
       } else if(freqHeat < 0){
         freqHeat += 1;
@@ -2167,6 +2165,16 @@ void updateControl() {
       if(note_delays[1]->ready()){
         notes[0]->note_on();
         note_delays[1]->start( getReleaseTime(envelope_mode) );
+      }
+    }
+  } else if(mode == PLACEMODE) {
+    unsigned long now = mozziMicros();
+    if(now-sweep_timer > 16000000){
+
+      if(freqHeat > 0 ){
+        freqHeat -= 1;
+      } else if(freqHeat < 0){
+        freqHeat += 1;
       }
     }
   }
@@ -2284,9 +2292,26 @@ bool colorCloseEnough(byte color, byte destColor){
 
 void showPlaceOsc(){
   for(byte i=0; i<=placeOsc; i++){
-    pixel_colors[i*3] = 255;
-    pixel_colors[i*3+1] = 255;
-    pixel_colors[i*3+2] = 255;
+    if(i==0){
+
+      if(placeOsc == 4){
+        pixel_colors[i*3] = 120;
+        pixel_colors[i*3+1] = 0;
+        pixel_colors[i*3+2] = 120;
+      } else {
+        pixel_colors[i*3] = 40;
+        pixel_colors[i*3+1] = 0;
+        pixel_colors[i*3+2] = 40;
+      }
+      
+    }
+  
+    if(notes[i]->get_frequency() != 0){
+      pixel_colors[(i+1)*3] = 12;
+      pixel_colors[(i+1)*3+1] = 12;
+      pixel_colors[(i+1)*3+2] = 120;
+    }
+    
   }
 }
 
@@ -2942,7 +2967,7 @@ int updateAudio(){
 
       // gain * filter(oscnext)
       // this was arpmode... mby put back?
-      if(mode == REGNOTEMODE || mode == ARPMODE || mode == REPEATMODE || mode == PLACEMODE){
+      if(mode == REGNOTEMODE || mode == ARPMODE || mode == REPEATMODE){
         // if( notes[i]->is_playing() ){
         // }
           sig += ( notes[i]->env_next() * (next_sample >> 2) );
@@ -2980,6 +3005,8 @@ int updateAudio(){
         sig += notes[i]->env_next() * ( ( next_sample * (1/i+1) ) >> 2);
         // sig += (int) ( notes[i]->env_next() * next_sample * (1/(i+1) * 0.68)  );
         // sig += (int) ( notes[i]->env_next() );
+      } else if(mode == PLACEMODE){
+        sig += ( notes[i]->env_next() * (next_sample >> 3) );
       }
     }
   }
