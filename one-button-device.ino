@@ -23,8 +23,8 @@ controls
 Cancel button?
 */
 
-// #include <EEPROM.h>
-// #define SETTINGS_ADDRESS 0
+#include <EEPROM.h>
+#define SETTINGS_ADDRESS 0
 
 // 0 tempo
 // 1 detune
@@ -153,7 +153,7 @@ bool pixel_flag2 = true;
 
 bool displayPlayNotes[4] = { false, false, false, false };
 
-byte tempo = 88;
+// byte `88;
 // we are in set tempo mode
 // a beat is happening right now
 bool onBeat = false;
@@ -272,6 +272,29 @@ bool dimThisMode = false;
 #define ROTARY_A_PIN 11
 #define ROTARY_B_PIN 12
 #define ROTARY_BUTTON_PIN 8
+
+
+
+struct Settings {
+  byte mode;
+  byte tempo;
+  int detune;
+  bool keylock;
+  byte harmonicMode;
+  byte key;
+  byte chord_schema;
+  // byte placeOsc
+};
+
+Settings settings;
+
+void saveSettings(){
+  EEPROM.put(SETTINGS_ADDRESS, settings);
+}
+
+void loadSettings(){
+  EEPROM.get(SETTINGS_ADDRESS, settings);
+}
 
 // this class wraps oscillators, when they're intended to be used for notes
 // need to make sure resetting them works, causes weird mode will probably bypass this
@@ -622,63 +645,6 @@ float note_to_freq(int midi_note){
 //         that way you only make legal moves iwthin the current key
 
 //     you can change mode to set intervals
-
-// void saveSettings(){
-//   // for(byte i=0; i<7; i++){
-//   //   // save each thing in settings into eeprom beeetch!
-//   //   EEPROM.put(SETTINGS_ADDRESS+i, userSettings[i])
-//   // }
-//   int address = SETTINGS_ADDRESS;
-//   EEPROM.put(address, tempo);
-//   address += sizeof(tempo);
-//   EEPROM.put(address, detune);
-//   address += sizeof(detune);
-//   EEPROM.put(address, keylock);
-//   address += sizeof(keylock);
-//   EEPROM.put(address, harmonicMode);
-//   address += sizeof(harmonicMode);
-//   EEPROM.put(address, key);
-//   address += sizeof(key);
-//   // this is lastmode because the save happens during selectoptionmode
-//   EEPROM.put(address, lastMode);
-//   address += sizeof(lastMode);
-//   EEPROM.put(address, chord_schema);
-//   address += sizeof(chord_schema);
-// }
-
-// void readSettings(){
-//   byte tempoCheck;
-//   EEPROM.get(SETTINGS_ADDRESS, tempoCheck);
-//   // Serial.print("Fucking got stupid ");
-//   // Serial.println(tempoCheck);
-//   if(tempoCheck > 0){
-//     tempo = tempoCheck;
-    
-//     int address = SETTINGS_ADDRESS;
-//     EEPROM.get(address, tempo);
-//     address += sizeof(tempo);
-//     EEPROM.get(address, detune);
-//     address += sizeof(address);
-//     EEPROM.get(address, keylock);
-//     address += sizeof(address);
-//     EEPROM.get(address, harmonicMode);
-//     address += sizeof(address);
-//     EEPROM.get(address, key);
-//     address += sizeof(address);
-//     EEPROM.get(address, lastMode);
-//     address += sizeof(address);
-//     EEPROM.get(address, chord_schema);
-//     // yeah baby
-//     // setup_mode(mode);
-//     // Serial.println(detune);
-//     // Serial.println(keylock);
-//     // Serial.println(harmonicMode);
-//     // Serial.println(key);
-//     // Serial.println(mode);
-//     // Serial.println(chord_schema);
-
-//   }  
-// }
 
 void safeRotaryChange(int8_t change){
   // change might be negative! so only add
@@ -1044,7 +1010,7 @@ void handle_note_button(){
             keylock = !keylock;
             // Serial.println(F("Hey  bitch"));
             // fuck it
-            // saveSettings();
+            saveSettings();
           } else {
             setup_mode( optionMode );
 
@@ -1065,7 +1031,7 @@ void handle_note_button(){
 
             // tempo = 60s * 1beat / tapTime
             // double it up, seems very slow
-            tempo = 60000000/(now - tempoTapTimer);
+            settings.tempo = 60000000/(now - tempoTapTimer);
             // Serial.print(F("Bitch I set the beat to "));
             // Serial.println(60000000/(now - tempoTapTimer));
           }
@@ -1551,11 +1517,11 @@ void setup(){
 
 
   // load settings from EEP <3 on startup
-  // readSettings();
+  loadSettings();
 }
 
 unsigned int oneBeat(){
-  return 60000 / tempo;
+  return 60000 / settings.tempo;
 }
 
 unsigned int getReleaseTime(byte env_mode){
@@ -2184,7 +2150,7 @@ void updateControl() {
     // set onbeat so displaymode will visualize the pulse
 
     unsigned long now = mozziMicros();
-    onBeat = isOnBeat(setTempoTime, now, tempo);
+    onBeat = isOnBeat(setTempoTime, now, settings.tempo);
     if(onBeat != lastOnBeat){
       // if we hit the first tick of a beat, resset the tempotime so it still fits in a unsigned long
       setTempoTime = now;
@@ -2291,25 +2257,23 @@ bool colorCloseEnough(byte color, byte destColor){
 }
 
 void showPlaceOsc(){
-  for(byte i=0; i<=placeOsc; i++){
-    if(i==0){
 
-      if(placeOsc == 4){
-        pixel_colors[i*3] = 120;
-        pixel_colors[i*3+1] = 0;
-        pixel_colors[i*3+2] = 120;
-      } else {
-        pixel_colors[i*3] = 40;
-        pixel_colors[i*3+1] = 0;
-        pixel_colors[i*3+2] = 40;
-      }
-      
-    }
+  if(placeOsc == 4){
+    pixel_colors[0] = 120;
+    pixel_colors[1] = 0;
+    pixel_colors[2] = 120;
+  } else {
+    pixel_colors[0] = 40;
+    pixel_colors[1] = 0;
+    pixel_colors[2] = 40;
+  }
+
+  for(byte i=1; i<placeOsc+1; i++){
   
     if(notes[i]->get_frequency() != 0){
-      pixel_colors[(i+1)*3] = 12;
-      pixel_colors[(i+1)*3+1] = 12;
-      pixel_colors[(i+1)*3+2] = 120;
+      pixel_colors[i*3] = 12;
+      pixel_colors[i*3+1] = 12;
+      pixel_colors[i*3+2] = 120;
     }
     
   }
