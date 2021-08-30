@@ -124,7 +124,7 @@ Cancel button?
 #define OPTION4COLOR_B 242
 
 
-bool keylock = false;
+// bool keylock = false;
 
 #define INTRODELAY 1618
 EventDelay introDelay = EventDelay(INTRODELAY);
@@ -141,10 +141,10 @@ Adafruit_NeoPixel pixel(NUMPIXELS, PIXELPIN, NEO_GRBW + NEO_KHZ800);
 byte pixel_colors[21];
 
 // which arp shape
-byte harmonicMode = 0;
+// byte harmonicMode = 0;
 const byte harmonicModeIntervals[] = { 0,2,2,1,2,2,2,1 };
 // this is goddamn fuckin major c bitch!
-byte key = 0;
+// byte key = 0;
 
 byte display_mode;
 byte pixel_counter = 0;
@@ -215,7 +215,7 @@ float volume = 1.0;
 
 int freqHeat = 0;
 
-int detune = 0;
+// int detune = 0;
 
 // for flanger
 // AudioDelay <256> aDel;
@@ -250,7 +250,7 @@ bool waiting_to_play_buffer = false;
 int8_t current_note = 0;
 
 // select which chord schema
-byte chord_schema = 0;
+// byte chord_schema = 0;
 
 // select which osc (or 4 == all) to edit
 byte placeOsc = 4;
@@ -276,7 +276,7 @@ bool dimThisMode = false;
 
 
 struct Settings {
-  byte mode;
+  // byte mode;
   byte tempo;
   int detune;
   bool keylock;
@@ -521,6 +521,8 @@ bool last_a = digitalRead(ROTARY_A_PIN);
 // know whether to fade down in showrotary
 bool rotaryMoved = false;
 
+byte optionMenuSelection;
+
 // on adafruit encoder, one 'click' == two moves
 // this is not a bounce from interference because if you hold it between clicks it makes one move
 // so wait for two moves before making one
@@ -557,7 +559,7 @@ void play_note(byte new_note, unsigned int delay_time, uint8_t available_slot){
   // float freq = note_to_freq(new_note);
   // Serial.println("FREQ IS");
   // Serial.println(freq);
-  notes[available_slot]->set_frequency( (float) note_to_freq(new_note) + detune );
+  notes[available_slot]->set_frequency( (float) note_to_freq(new_note) + settings.detune );
   // save which midi note
   notes[available_slot]->store_note(new_note);
 
@@ -698,7 +700,7 @@ byte getHarmonicModeOffset(byte arp_index){
   byte offset = 0;
   
   // start at our selected modes starting point
-  byte modeIntervalIndex = harmonicMode;
+  byte modeIntervalIndex = settings.harmonicMode;
 
   for(byte i=0; i<(arp_index+1); i++){
     // add in the intervals for each step up to our current arp note
@@ -792,15 +794,15 @@ float calcFreqOffset(int rpMoves){
   // freq heat just serves to pump up size of each move (1 rpmove) if you're realllly turnin
 
   Serial.print("Im settin to ");
-  Serial.println(rpMoves + (8 * freqHeat) + detune);
+  Serial.println(rpMoves + (8 * freqHeat) + settings.detune);
 
-  return rpMoves + (8 * freqHeat) + detune;
+  return rpMoves + (8 * freqHeat) + settings.detune;
 }
 
 float calcKnobOffset(int rpMoves){
   // freq heat just serves to pump up size of each move (1 rpmove) if you're realllly turnin
 
-  return 16 * rpMoves + detune;
+  return 16 * rpMoves + settings.detune;
 }
 
 void handle_rotary_button(){
@@ -835,15 +837,15 @@ void handle_rotary_button(){
 
             // if big button is held, and its chordschema, use rb to increment chordschema
             // Serial.println(F("I incremented chordschema "));
-            chord_schema++;
-            if(chord_schema > 6){
-              chord_schema = 0;
+            settings.chord_schema++;
+            if(settings.chord_schema > 6){
+              settings.chord_schema = 0;
             }
             setDisplayMode(SHOWCHORDSCHEMA);            
           } else if(mode == ARPMODE){
-            harmonicMode++;
-            if(harmonicMode > 6){
-              harmonicMode = 0;
+            settings.harmonicMode++;
+            if(settings.harmonicMode > 6){
+              settings.harmonicMode = 0;
             }
             setDisplayMode(SHOWHARMMODE);
           } else if(mode == PLACEMODE){
@@ -887,7 +889,6 @@ void handle_rotary_button(){
 
       // held rb for long enough (3s), start tempo setting mode
       setup_mode(SELECTOPTIONMODE);
-      setDisplayMode(SHOWSELECT);
       // Serial.println(F("Set freakin selectoptionmode"));
 
     } else if(lastMode >= 0){
@@ -997,7 +998,7 @@ void handle_note_button(){
           play_note(115 + rotary_position, false, 3);
         } else if(mode == SELECTOPTIONMODE){
           // pressed button, so select mode based on rotary position % 3
-          byte optionMode = abs(rotary_position) % 6 + 10;
+          byte optionMode = optionMenuSelection + 10;
           // Serial.print(F("I have selected option "));
           // Serial.println(optionMode);
           
@@ -1007,7 +1008,7 @@ void handle_note_button(){
           if(optionMode == 15){
             // this is just more than the last seelct option -> not really a mode
 
-            keylock = !keylock;
+            settings.keylock = !settings.keylock;
             // Serial.println(F("Hey  bitch"));
             // fuck it
             saveSettings();
@@ -1071,7 +1072,7 @@ void handle_note_button(){
             displayPlayNotes[i] = false;
           }
         } else if(mode == ARPMODE){
-          arp_note_index = harmonicMode;
+          arp_note_index = settings.harmonicMode;
         }
 
         play_continuing = TAILING;
@@ -1135,33 +1136,33 @@ void play_schema_chord(byte starting_note){
   // Serial.print(F("Chord schema is "));
   // Serial.println(chord_schema); 
 
-  if(chord_schema == MAJOR){
+  if(settings.chord_schema == MAJOR){
     note1 = starting_note;
     note2 = starting_note+4;
     note3 = starting_note+7;
-  } else if(chord_schema == MINOR){
+  } else if(settings.chord_schema == MINOR){
     note1 = starting_note;
     note2 = starting_note+3;
     note3 = starting_note+7;
-  } else if(chord_schema == MAJORSEVENTH){
+  } else if(settings.chord_schema == MAJORSEVENTH){
     note1 = starting_note;
     note2 = starting_note+3;
     note3 = starting_note+7;
     note4 = starting_note+11;
-  } else if(chord_schema == MINORSEVENTH){
+  } else if(settings.chord_schema == MINORSEVENTH){
     note1 = starting_note;
     note2 = starting_note+3;
     note3 = starting_note+7;
     note4 = starting_note+10;
-  } else if(chord_schema == MINORTHIRDS){
+  } else if(settings.chord_schema == MINORTHIRDS){
     note1 = starting_note;
     note2 = starting_note+3;
     note3 = starting_note+3;
-  } else if(chord_schema == MAJORTHIRDS){
+  } else if(settings.chord_schema == MAJORTHIRDS){
     note1 = starting_note;
     note2 = starting_note+4;
     note3 = starting_note+8;
-  } else if(chord_schema == STEPFIFTH){
+  } else if(settings.chord_schema == STEPFIFTH){
     note1 = starting_note;
     note2 = starting_note+2;
     note3 = starting_note+7;
@@ -1428,7 +1429,7 @@ float get_slope(float y2, float x2, int y1, int x1){
 }
 
 void setup(){
-  Serial.begin(9600);
+  // Serial.begin(9600);
 
   // start somewhere random in the 'random seq'
   randomSeed(analogRead(0));
@@ -1514,7 +1515,6 @@ void setup(){
 
   setDisplayMode(SHOWINTRO);
   introDelay.start(INTRODELAY);
-
 
   // load settings from EEP <3 on startup
   loadSettings();
@@ -1739,9 +1739,16 @@ void setup_mode(byte newmode){
   // show the new mode, unless its an option
   if(mode < SELECTOPTIONMODE){
     setDisplayMode(SHOWMODE);
+    // done with this, dump it
+    optionMenuSelection = NULL;
   } else {
     // otherwise show option mode
-    if(mode == SETTEMPOMODE){
+    if(mode == SELECTOPTIONMODE){
+      // reset  rotary_position?
+      optionMenuSelection = 0;
+      setDisplayMode(SHOWSELECT);
+
+    } else if(mode == SETTEMPOMODE){
       setDisplayMode(SHOWTEMPO);
     } else if(mode == SETFILTERMODE){
       // Serial.println(F("Setting filter mode display"));
@@ -1932,8 +1939,8 @@ void updateControl() {
         }
 
       } else if(mode == SETDETUNEMODE){
-        if( detune + rp_move > -50 && detune + rp_move <= 50 ){
-          detune += rp_move;
+        if( settings.detune + rp_move > -50 && settings.detune + rp_move <= 50 ){
+          settings.detune += rp_move;
         }
 
       }
@@ -1941,8 +1948,13 @@ void updateControl() {
     } else if(rotaryState == 2 && mode <= SELECTOPTIONMODE){
       // need rp to move to select an option!
 
-      // only set when changing freq
-      if(mode == PLACEMODE){
+      if(mode == SELECTOPTIONMODE){
+        if(optionMenuSelection + rp_move >= 0 && optionMenuSelection + rp_move < 6){
+          optionMenuSelection += rp_move;
+        }
+
+      } else if(mode == PLACEMODE){
+        // only set when changing freq
         int oldFreqHeat = freqHeat;
         freqHeat += rp_move * 2;
         if( (freqHeat ^ oldFreqHeat) < 0 ){
@@ -1957,7 +1969,7 @@ void updateControl() {
         setPlaceFreq( placeOsc, rp_move );
       } else if(mode != SWEEPMODE) {
 
-        if(keylock){
+        if(settings.keylock){
           safeRotaryChange( moveRotaryWithinScale(rp_move) );
         } else {
           // is regular
@@ -2452,54 +2464,56 @@ void showRotary(){
   }
 }
 
+void setOptionColor(byte pixelIndex, byte optionColorIndex, bool selected){
+  byte brightness = selected ? 1 : 16;
+
+ if(optionColorIndex == 0){
+    // 12
+    pixel_colors[pixelIndex*3] = OPTION0COLOR_R/brightness;
+    pixel_colors[pixelIndex*3+1] = OPTION0COLOR_G/brightness;
+    pixel_colors[pixelIndex*3+2] = OPTION0COLOR_B/brightness;
+  } else if(optionColorIndex == 1 ){
+    // 34
+    pixel_colors[pixelIndex*3] = OPTION1COLOR_R/brightness;
+    pixel_colors[pixelIndex*3+1] = OPTION1COLOR_G/brightness;
+    pixel_colors[pixelIndex*3+2] = OPTION1COLOR_B/brightness;
+  } else if(optionColorIndex == 2){
+    pixel_colors[pixelIndex*3] = OPTION2COLOR_R/brightness;
+    pixel_colors[pixelIndex*3+1] = OPTION2COLOR_G/brightness;
+    pixel_colors[pixelIndex*3+2] = OPTION2COLOR_B/brightness;
+  } else if(optionColorIndex == 3) {
+    // 56
+    pixel_colors[pixelIndex*3] = OPTION3COLOR_R/brightness;
+    pixel_colors[pixelIndex*3+1] = OPTION3COLOR_G/brightness;
+    pixel_colors[pixelIndex*3+2] = OPTION3COLOR_B/brightness;
+  } else if(optionColorIndex == 4) {
+    // 56
+    pixel_colors[pixelIndex*3] = OPTION4COLOR_R/brightness;
+    pixel_colors[pixelIndex*3+1] = OPTION4COLOR_G/brightness;
+    pixel_colors[pixelIndex*3+2] = OPTION4COLOR_B/brightness;
+  } else if(optionColorIndex == 5) {
+    // 56
+    if(settings.keylock){
+      pixel_colors[pixelIndex*3] = 130/brightness;
+      pixel_colors[pixelIndex*3+1] = 20/brightness;
+      pixel_colors[pixelIndex*3+2] = 0/brightness; 
+    } else {
+      pixel_colors[pixelIndex*3] = 16/brightness;
+      pixel_colors[pixelIndex*3+1] = 16/brightness;
+      pixel_colors[pixelIndex*3+2] = 16/brightness;
+    }
+  }
+}
+
 void showSelectOption(){
-  byte selected = abs(rotary_position) % 6;
-  for(byte i=1; i<NUMPIXELS; i++){
+  // where to start window of visible options
+  // +1 because thsoe are the pixels were using
+  byte windowStart = (optionMenuSelection > 3 ? optionMenuSelection-3 : 0);
 
-    byte brightness;
+  for(byte i=0; i<NUMPIXELS; i++){
+    if(i != 0 && i<5){
+      setOptionColor(i, windowStart+(i-1), optionMenuSelection == (windowStart+(i-1)));
 
-    if(i == 1){
-      brightness = selected == 0 ? 1 : 16;
-      // 12
-      pixel_colors[i*3] = OPTION0COLOR_R/brightness;
-      pixel_colors[i*3+1] = OPTION0COLOR_G/brightness;
-      pixel_colors[i*3+2] = OPTION0COLOR_B/brightness;
-    } else if(i == 2 ){
-      brightness = selected == 1 ? 1 : 16;
-      // 34
-      pixel_colors[i*3] = OPTION1COLOR_R/brightness;
-      pixel_colors[i*3+1] = OPTION1COLOR_G/brightness;
-      pixel_colors[i*3+2] = OPTION1COLOR_B/brightness;
-    } else if(i == 3){
-      brightness = selected == 2 ? 1 : 16;
-      pixel_colors[i*3] = OPTION2COLOR_R/brightness;
-      pixel_colors[i*3+1] = OPTION2COLOR_G/brightness;
-      pixel_colors[i*3+2] = OPTION2COLOR_B/brightness;
-    } else if(i == 4) {
-      brightness = selected == 3 ? 1 : 16;
-      // 56
-      pixel_colors[i*3] = OPTION3COLOR_R/brightness;
-      pixel_colors[i*3+1] = OPTION3COLOR_G/brightness;
-      pixel_colors[i*3+2] = OPTION3COLOR_B/brightness;
-    } else if(i == 5) {
-      brightness = selected == 4 ? 1 : 16;
-      // 56
-      pixel_colors[i*3] = OPTION4COLOR_R/brightness;
-      pixel_colors[i*3+1] = OPTION4COLOR_G/brightness;
-      pixel_colors[i*3+2] = OPTION4COLOR_B/brightness;
-    } else if(i == 6) {
-      brightness = selected == 5 ? 1 : 16;
-      // 56
-      if(keylock){
-        pixel_colors[i*3] = 130/brightness;
-        pixel_colors[i*3+1] = 20/brightness;
-        pixel_colors[i*3+2] = 0/brightness; 
-      } else {
-        pixel_colors[i*3] = 16/brightness;
-        pixel_colors[i*3+1] = 16/brightness;
-        pixel_colors[i*3+2] = 16/brightness;
-      }
-      
     } else {
       pixel_colors[i*3] = 0;
       pixel_colors[i*3+1] = 0;
@@ -2555,7 +2569,7 @@ void showDelay(){
 
 void showDetune(){
    for(byte i=1; i<NUMPIXELS; i++){
-    if( i < floor(((float) (detune+50)/100 ) * 8) ){
+    if( i < floor(((float) (settings.detune+50)/100 ) * 8) ){
       // show pix proportional to vol oom
       pixel_colors[i*3] = OPTION4COLOR_R;
       pixel_colors[i*3+1] = OPTION4COLOR_G;
@@ -2707,7 +2721,7 @@ void showIdle(){
 void showChordSchema(){
   for(byte i=0; i<NUMPIXELS; i++){
 
-    if(i <= chord_schema){
+    if(i <= settings.chord_schema){
       // red for chordschema count
       pixel_colors[i*3] = 200;
       pixel_colors[i*3+1] = 0;
@@ -2725,7 +2739,7 @@ void showChordSchema(){
 void showHarmMode(){
   for(byte i=0; i<NUMPIXELS; i++){
 
-    if(i <= harmonicMode){
+    if(i <= settings.harmonicMode){
       // red for chordschema count
       pixel_colors[i*3] = 0;
       pixel_colors[i*3+1] = 50;
