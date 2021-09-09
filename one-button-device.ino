@@ -82,6 +82,9 @@ Cancel button?
 #define SETVOLMODE 12
 #define SETDELAYMODE 13
 #define SETDETUNEMODE 14
+#define TOGGLEKEYLOCK 15
+#define DEFAULTSETTINGS 16
+#define SAVESETTINGS 17
 
 // display modes
 #define COOL 0
@@ -185,12 +188,12 @@ Oscil <8192, AUDIO_RATE> aSin3(SIN8192_DATA);
 // Oscil <COS2048_NUM_CELLS, AUDIO_RATE> aVibrato(COS2048_DATA);
 
 // deelay
-#define DELAY_BUFFER_LENGTH 256
+#define DELAY_BUFFER_LENGTH 128
 byte delayIndex = 0;
 int delayBuffer[DELAY_BUFFER_LENGTH];
 
 #define MAX_DELAY_TIME 480
-unsigned int delayTime = 240;
+// unsigned int delayTime = 240;
 unsigned long delayTimer = mozziMicros();
 
 // ReverbTank reverb;
@@ -276,14 +279,14 @@ bool dimThisMode = false;
 
 
 struct Settings {
-  // byte mode;
+  byte mode;
   byte tempo;
   int detune;
   bool keylock;
   byte harmonicMode;
   byte key;
   byte chord_schema;
-  // byte placeOsc
+  unsigned long delayTime;
 };
 
 Settings settings;
@@ -793,8 +796,8 @@ void setPlaceFreq(byte osc_index, int8_t rpMove){
 float calcFreqOffset(int rpMoves){
   // freq heat just serves to pump up size of each move (1 rpmove) if you're realllly turnin
 
-  Serial.print("Im settin to ");
-  Serial.println(rpMoves + (8 * freqHeat) + settings.detune);
+  // Serial.print("Im settin to ");
+  // Serial.println(rpMoves + (8 * freqHeat) + settings.detune);
 
   return rpMoves + (8 * freqHeat) + settings.detune;
 }
@@ -973,12 +976,6 @@ void handle_note_button(){
           // kind of violinish
           // next note is C3 offset by current rotary value!
 
-          // play overtones fool
-          // Serial.print(F("trying hard to play beauty... "));
-          // for(byte i=0; i<4; i++){
-          //   notes[i]->note_off();
-          // }
-
           play_note(72 + rotary_position, 0, 0);
           play_note(84 + rotary_position, 0, 1);
           play_note(96 + rotary_position, 0, 2);
@@ -1005,12 +1002,30 @@ void handle_note_button(){
           // last light is actually a toggle
           // Serial.print("omode is ");
           // Serial.println(optionMode);
-          if(optionMode == 15){
+          if(optionMode == TOGGLEKEYLOCK){
             // this is just more than the last seelct option -> not really a mode
 
             settings.keylock = !settings.keylock;
             // Serial.println(F("Hey  bitch"));
             // fuck it
+
+          } else if(optionMode == DEFAULTSETTINGS){
+  
+            // bcause were in selectmode right now
+            settings.mode = REGNOTEMODE;
+            settings.tempo = 88;
+            settings.detune = 0;
+            settings.keylock = false;
+            settings.harmonicMode = 0;
+            settings.key = 0;
+            settings.chord_schema = 0;
+            settings.delayTime = 240;
+            saveSettings();
+
+            } else if(optionMode == SAVESETTINGS){
+  
+            // bcause were in selectmode right now
+            settings.mode = lastMode;
             saveSettings();
           } else {
             setup_mode( optionMode );
@@ -1336,7 +1351,7 @@ void set_effects() {
 // #define SOFTSLOPEFACTOR -1.0/6.0;
 
 int render_delay(int signal){
-  if( mozziMicros() - delayTimer > delayTime ){
+  if( mozziMicros() - delayTimer > settings.delayTime ){
     // get old sample to play back (if avail)
     int toPlay = delayBuffer[delayIndex];
 
@@ -1431,6 +1446,8 @@ float get_slope(float y2, float x2, int y1, int x1){
 void setup(){
   // Serial.begin(9600);
 
+  // load settings from EEP <3 on startup
+  loadSettings();  
   // start somewhere random in the 'random seq'
   randomSeed(analogRead(0));
   
@@ -1510,14 +1527,18 @@ void setup(){
   note_delays[2] = &event_delay2;
   note_delays[3] = &event_delay3;
 
+  // Serial.print(F("Loaded up "));
+  // Serial.println(settings.mode);
+  if(!settings.mode || settings.mode >= SELECTOPTIONMODE){
+    // Serial.println(F("I reset to reg..."));
+    settings.mode = REGNOTEMODE;
+  }
+  mode = settings.mode;
   // INITIAL MODEFOOL
   setup_mode(mode);
 
   setDisplayMode(SHOWINTRO);
   introDelay.start(INTRODELAY);
-
-  // load settings from EEP <3 on startup
-  loadSettings();
 }
 
 unsigned int oneBeat(){
@@ -1934,8 +1955,8 @@ void updateControl() {
         }
 
       } else if(mode == SETDELAYMODE){
-        if( delayTime + rp_move*10 > 0 && delayTime + rp_move*10 <= MAX_DELAY_TIME ){
-          delayTime += rp_move*10;
+        if( settings.delayTime + rp_move*10 > 0 && settings.delayTime + rp_move*10 <= MAX_DELAY_TIME ){
+          settings.delayTime += rp_move*10;
         }
 
       } else if(mode == SETDETUNEMODE){
@@ -1949,7 +1970,7 @@ void updateControl() {
       // need rp to move to select an option!
 
       if(mode == SELECTOPTIONMODE){
-        if(optionMenuSelection + rp_move >= 0 && optionMenuSelection + rp_move < 6){
+        if(optionMenuSelection + rp_move >= 0 && optionMenuSelection + rp_move < 8){
           optionMenuSelection += rp_move;
         }
 
@@ -2496,12 +2517,20 @@ void setOptionColor(byte pixelIndex, byte optionColorIndex, bool selected){
     if(settings.keylock){
       pixel_colors[pixelIndex*3] = 130/brightness;
       pixel_colors[pixelIndex*3+1] = 20/brightness;
-      pixel_colors[pixelIndex*3+2] = 0/brightness; 
+      pixel_colors[pixelIndex*3+2] = 0; 
     } else {
       pixel_colors[pixelIndex*3] = 16/brightness;
       pixel_colors[pixelIndex*3+1] = 16/brightness;
       pixel_colors[pixelIndex*3+2] = 16/brightness;
     }
+  } else if(optionColorIndex == 6){
+    pixel_colors[pixelIndex*3] = 40/brightness;
+    pixel_colors[pixelIndex*3+1] = 0;
+    pixel_colors[pixelIndex*3+2] = 0; 
+  } else if(optionColorIndex == 7){
+    pixel_colors[pixelIndex*3] = 150/brightness;
+    pixel_colors[pixelIndex*3+1] = 50/brightness;
+    pixel_colors[pixelIndex*3+2] = 180/brightness; 
   }
 }
 
@@ -2512,6 +2541,9 @@ void showSelectOption(){
 
   for(byte i=0; i<NUMPIXELS; i++){
     if(i != 0 && i<5){
+      // only light 1-4
+
+
       setOptionColor(i, windowStart+(i-1), optionMenuSelection == (windowStart+(i-1)));
 
     } else {
@@ -2554,7 +2586,7 @@ void showVol(){
 
 void showDelay(){
    for(byte i=1; i<NUMPIXELS; i++){
-    if( i < floor( (float) delayTime/1000 * 8 ) ){
+    if( i < floor( (float) settings.delayTime/1000 * 8 ) ){
       // show pix proportional to vol oom
       pixel_colors[i*3] = OPTION3COLOR_R;
       pixel_colors[i*3+1] = OPTION3COLOR_G;

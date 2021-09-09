@@ -332,7 +332,18 @@ clearing/setting pixel too many times was increasing..
 
 
 
-suboptions menu
+*suboptions menu
+  scrholling menu
+
+SAVING WORKS BIIIIIIIIIIICH
+
+need bool to track whether settings are saved or not
+  show as light
+
+'reset to defaults' option
+
+add delayTime to options
+  and anything else cool
 
 
 
