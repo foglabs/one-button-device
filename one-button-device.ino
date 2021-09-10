@@ -1011,8 +1011,8 @@ void handle_note_button(){
 
           } else if(optionMode == DEFAULTSETTINGS){
   
-            // bcause were in selectmode right now
-            settings.mode = REGNOTEMODE;
+            // dont do it
+            // settings.mode = REGNOTEMODE;
             settings.tempo = 88;
             settings.detune = 0;
             settings.keylock = false;
