@@ -53,7 +53,7 @@ Cancel button?
 // #include <ReverbTank.h>
 // #include <Phasor.h>
 
-#define AUDIO_MODE STANDARD_PLUS
+#define AUDIO_MODE HIFI
 #include <mozzi_midi.h>
 #include <tables/sin8192_int8.h> // sine table for oscillator
 // #include <tables/cos2048_int8.h> // sine table for oscillator
@@ -75,7 +75,7 @@ Cancel button?
 #define REPEATMODE 6
 #define SWEEPMODE 7
 #define PLACEMODE 8
-// its gotta be last
+// its gotta be last v
 #define SELECTOPTIONMODE 9
 #define SETTEMPOMODE 10
 #define SETFILTERMODE 11
@@ -1022,15 +1022,15 @@ void handle_note_button(){
             settings.delayTime = 240;
             saveSettings();
 
-            } else if(optionMode == SAVESETTINGS){
+          } else if(optionMode == SAVESETTINGS){
   
             // bcause were in selectmode right now
             settings.mode = lastMode;
             saveSettings();
           } else {
             setup_mode( optionMode );
-
           }
+          
         } else if(mode == PLACEMODE){
           // just start em up at whatever freq they're at
           notes[0]->note_on();
@@ -2285,9 +2285,9 @@ bool inRange(byte low, byte high, byte value){
   return low <= value && value <= high;
 }
 
-bool colorCloseEnough(byte color, byte destColor){
-  return inRange(destColor-4, destColor+4, color);
-}
+// bool colorCloseEnough(byte color, byte destColor){
+//   return inRange(destColor-4, destColor+4, color);
+// }
 
 void showPlaceOsc(){
 
@@ -2478,7 +2478,7 @@ void showRotary(){
     for(byte i=6; i<12; i++){
       if(pixel_colors[i]-20 > 0){
         pixel_colors[i] -= 20;
-      } else {
+      } else { 
         pixel_colors[i] = 0;
       }
     }

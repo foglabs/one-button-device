@@ -340,10 +340,56 @@ SAVING WORKS BIIIIIIIIIIICH
 need bool to track whether settings are saved or not
   show as light
 
-'reset to defaults' option
+*'reset to defaults' option
 
-add delayTime to options
+*add delayTime to options
   and anything else cool
+
+
+
+
+PARTS LIST + BUILD INSTRUCTIONS
+-----
+
+1 4x6 ABS Box
+1 Clear 1x1in Acrylic Square
+4 Rubber Feet w/ Screws
+
+1 24mm Arcade Button
+3 Latching Buttons
+1 Rotary Encoder
+1 Neopixel Jewel
+
+1 1/4in Mono Audio Jack
+1 Small Permaproto Board
+1 ? Resistor
+1 ? Capacitor
+
+
+
+Plenty of lil screws and nuts
+Something-gauge Silicone-insulated Wire
+6mm (?) Standoffs for Arduino and Audio Board
+
+
+BUILD
+(all drilled holes are measured from center)
+
+
+
+
+
+
+
+packaging
+  black/gradient lit product shot background
+  device is resting on shiny black glass, lit like a car
+  small thin flower vase sitting next to it
+  sides and top are all photo from relative angle of the same scene
+
+  simple yamahaesque bars and typo with name etc
+
+
 
 
 
