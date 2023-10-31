@@ -207,7 +207,7 @@ ADSR <AUDIO_RATE, AUDIO_RATE> envelope3;
 // byte[4] gains = {0,0,0,0};
 
 // Effects objects
-bool toggles[4] = {false,false,false,false};
+bool toggles[3] = {false,false,false};
 
 // to know if we should reset enveleopes
 bool last_env_toggle = false;
@@ -264,17 +264,18 @@ int8_t lastMode = -1;
 // modes with lots of voices need to be SHUT UP
 bool dimThisMode = false;
 
-#define BIGBUTTONPIN 2
-#define BIGBUTTON_LED_PIN 10
+#define BIGBUTTONPIN 8
+// #define BIGBUTTON_LED_PIN 10
 
-#define TOGGLE_0_PIN 3
-#define TOGGLE_1_PIN 4
-#define TOGGLE_2_PIN 5
-#define TOGGLE_3_PIN 6
+#define TOGGLE_0_PIN 5
+#define TOGGLE_1_PIN 6
+#define TOGGLE_2_PIN 7
+// not used
+// #define TOGGLE_3_PIN 6
 
-#define ROTARY_A_PIN 11
-#define ROTARY_B_PIN 12
-#define ROTARY_BUTTON_PIN 8
+#define ROTARY_A_PIN 2
+#define ROTARY_B_PIN 3
+#define ROTARY_BUTTON_PIN 4
 
 
 
@@ -1332,7 +1333,7 @@ void set_effects() {
     // }
     
     // comes in backwards... (and noexistent ones are true)
-    toggles[i] = !digitalRead(i+3);
+    toggles[i] = !digitalRead(i+5);
     // Serial.print("TOgg ");
     // Serial.print(i);
     // Serial.print(" ");
@@ -1471,7 +1472,7 @@ void setup(){
   pinMode(TOGGLE_0_PIN, INPUT_PULLUP);
   pinMode(TOGGLE_1_PIN, INPUT_PULLUP);
   pinMode(TOGGLE_2_PIN, INPUT_PULLUP);
-  pinMode(TOGGLE_3_PIN, INPUT_PULLUP);
+  // pinMode(TOGGLE_3_PIN, INPUT_PULLUP);
 
   pinMode(ROTARY_BUTTON_PIN, INPUT_PULLUP);
 
@@ -2268,7 +2269,8 @@ void writeDisplay(){
     }
 
     // use the pix timer to write to the button as well
-    handleArcadeButton();
+    // handled in hardware now v
+    // handleArcadeButton();
 
     // pixel_timer = now;
     pixel.show();
@@ -2276,9 +2278,9 @@ void writeDisplay(){
   }
 }
 
-void handleArcadeButton(){
-  analogWrite(BIGBUTTON_LED_PIN, bigButtonBrightness);
-}
+// void handleArcadeButton(){
+//   analogWrite(BIGBUTTON_LED_PIN, bigButtonBrightness);
+// }
 
 bool inRange(byte low, byte high, byte value){
   // dont page me
